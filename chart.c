@@ -27,25 +27,28 @@ static gint chart_signals[SIGNAL_COUNT] = { 0 };
 static void 
 chart_class_init(ChartClass *klass)
 {
-  GtkObjectClass *object_class = (GtkObjectClass *)klass;
+  GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
   chart_signals[PRE_UPDATE] = 
-    gtk_signal_new("chart_pre_update",
-      GTK_RUN_FIRST, GTK_CLASS_TYPE(object_class),
-      GTK_SIGNAL_OFFSET(ChartClass, chart_pre_update),
-      gtk_signal_default_marshaller, GTK_TYPE_NONE, 0);
+    g_signal_new("chart_pre_update", 
+		    G_TYPE_FROM_CLASS(object_class), G_SIGNAL_RUN_FIRST, 
+		    G_STRUCT_OFFSET(ChartClass, chart_pre_update),
+		    NULL, NULL,
+		    g_cclosure_marshal_VOID__VOID, GTK_TYPE_NONE, 0);
 
   chart_signals[POST_UPDATE] = 
-    gtk_signal_new("chart_post_update",
-      GTK_RUN_FIRST, GTK_CLASS_TYPE(object_class),
-      GTK_SIGNAL_OFFSET(ChartClass, chart_post_update),
-      gtk_signal_default_marshaller, GTK_TYPE_NONE, 0);
+    g_signal_new("chart_post_update", 
+		    G_TYPE_FROM_CLASS(object_class), G_SIGNAL_RUN_FIRST, 
+		    G_STRUCT_OFFSET(ChartClass, chart_post_update),
+		    NULL, NULL,
+		    g_cclosure_marshal_VOID__VOID, GTK_TYPE_NONE, 0);
 
   chart_signals[RESCALE] = 
-    gtk_signal_new("chart_rescale",
-      GTK_RUN_FIRST, GTK_CLASS_TYPE(object_class),
-      GTK_SIGNAL_OFFSET(ChartClass, chart_rescale),
-      gtk_signal_default_marshaller, GTK_TYPE_NONE, 0);
+    g_signal_new("chart_rescale", 
+		    G_TYPE_FROM_CLASS(object_class), G_SIGNAL_RUN_FIRST, 
+		    G_STRUCT_OFFSET(ChartClass, chart_rescale),
+		    NULL, NULL,
+		    g_cclosure_marshal_VOID__VOID, GTK_TYPE_NONE, 0);
 
   // gtk_object_class_add_signals(object_class, chart_signals, SIGNAL_COUNT);
   klass->chart_rescale = NULL;
@@ -70,31 +73,24 @@ chart_object_init(Chart *chart)
 
   chart_set_interval(chart, 1000);
 
-  gtk_signal_connect(GTK_OBJECT(chart),
-    "configure_event", (GtkSignalFunc)chart_configure, NULL);
+  g_signal_connect(chart, "configure_event", G_CALLBACK(chart_configure), NULL);
 }
 
-guint
+GType
 chart_get_type(void)
 {
-  static guint gc_type = 0;
+  static GType type = 0;
 
-  if (!gc_type)
-    {
-      GtkTypeInfo gc_info =
-      {
-	"Chart",
-	sizeof(Chart),
-	sizeof(ChartClass),
-	(GtkClassInitFunc)chart_class_init,
-	(GtkObjectInitFunc)chart_object_init,
-	NULL,
-	NULL,
-	(GtkClassInitFunc)NULL
-      };
-      gc_type = gtk_type_unique(gtk_drawing_area_get_type(), &gc_info);
-    }
-  return gc_type;
+  if (type)
+	  return type;
+  static const GTypeInfo info = {
+	  .class_size = sizeof(ChartClass),
+	  .class_init = (GClassInitFunc)chart_class_init,
+	  .instance_size = sizeof(Chart),
+	  .instance_init = (GInstanceInitFunc)chart_object_init
+  };
+  type = g_type_register_static(GTK_TYPE_DRAWING_AREA, "Chart", &info, 0);
+  return type;
 }
 
 typedef struct
@@ -402,7 +398,7 @@ chart_set_plot_style(ChartDatum *datum, ChartPlotStyle plot_style)
 void
 chart_assign_color(Chart *chart, ChartDatum *datum)
 {
-  gchar *names, *color, *whitespace = " \t\r\n";
+  gchar *names, *color = NULL, *whitespace = " \t\r\n";
   GdkColor default_fg = GTK_WIDGET(chart)->style->fg[GTK_WIDGET_STATE(chart)];
 
   datum->colors = 0;
@@ -410,16 +406,16 @@ chart_assign_color(Chart *chart, ChartDatum *datum)
   datum->gdk_color = NULL;
 
   names = g_strdup(datum->color_names);
-  color = strtok(names, whitespace);
-  while (color != NULL)
+  do
     {
+    color = strtok(color ? NULL : names, whitespace);
       gint cnum = datum->colors++;
       datum->gdk_color = g_realloc(datum->gdk_color,
 	datum->colors * sizeof(*datum->gdk_color));
       datum->gdk_gc = g_realloc(datum->gdk_gc,
 	datum->colors * sizeof(*datum->gdk_gc));
 
-      if (!gdk_color_parse(color, &datum->gdk_color[cnum]))
+      if (!color || !gdk_color_parse(color, &datum->gdk_color[cnum]))
 	{
 	  g_warning("Unknown color: (%s); Using default fg color.", color);
 	  datum->gdk_color[cnum] = default_fg;
@@ -427,8 +423,8 @@ chart_assign_color(Chart *chart, ChartDatum *datum)
       gdk_color_alloc(chart->colormap, &datum->gdk_color[cnum]);
       datum->gdk_gc[cnum] = gdk_gc_new(GTK_WIDGET(chart)->window);
       gdk_gc_set_foreground(datum->gdk_gc[cnum], &datum->gdk_color[cnum]);
-      color = strtok(NULL, whitespace);
     }
+  while (color != NULL);
   g_free(names);
 }
 

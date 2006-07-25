@@ -77,8 +77,8 @@ add_color(Param_page *page)
       page->color[page->colors] = gnome_color_picker_new();
       gtk_box_pack_start(GTK_BOX(page->color_hbox),
 	page->color[page->colors], FALSE, FALSE, 0);
-      gtk_signal_connect(GTK_OBJECT(page->color[page->colors]),
-	"color_set", GTK_SIGNAL_FUNC(on_color_set), page);
+      g_signal_connect(page->color[page->colors],
+	"color_set", G_CALLBACK(on_color_set), page);
       page->colors++;
     }
   gtk_widget_show(page->color[page->shown++]);
@@ -400,10 +400,8 @@ on_save_as(GtkMenuItem *menuitem, Chart_app *app)
       GtkWidget *fs = gtk_file_selection_new("Save As...");
       gtk_file_selection_hide_fileop_buttons(GTK_FILE_SELECTION(fs));
       gtk_file_selection_set_filename(GTK_FILE_SELECTION(fs), app->config_fn);
-      gtk_signal_connect(GTK_OBJECT(GTK_FILE_SELECTION(fs)->cancel_button),
-	"clicked", GTK_SIGNAL_FUNC(on_save_as_cancel), app);
-      gtk_signal_connect(GTK_OBJECT(GTK_FILE_SELECTION(fs)->ok_button),
-	"clicked", GTK_SIGNAL_FUNC(on_save_as_okay), app);
+      g_signal_connect(GTK_FILE_SELECTION(fs)->cancel_button, "clicked", G_CALLBACK(on_save_as_cancel), app);
+      g_signal_connect(GTK_FILE_SELECTION(fs)->ok_button, "clicked", G_CALLBACK(on_save_as_okay), app);
       app->file_sel = fs;
     }
   gtk_widget_show(app->file_sel);
@@ -568,7 +566,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->name = gtk_entry_new();
   gtk_widget_show(page->name);
-  gtk_signal_connect(GTK_OBJECT(page->name), "changed", GTK_SIGNAL_FUNC(on_relabel), page);
+  g_signal_connect(page->name, "changed", G_CALLBACK(on_relabel), page);
   gtk_table_attach(GTK_TABLE(page->table),
     page->name, 1, 2, 0, 1, 0, 0, 0, 0);
 
@@ -596,7 +594,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->eqn = gtk_entry_new();
   gtk_widget_show(page->eqn);
-  gtk_signal_connect(GTK_OBJECT(page->eqn), "changed", GTK_SIGNAL_FUNC(on_change), page);
+  g_signal_connect(page->eqn, "changed", G_CALLBACK(on_change), page);
   gtk_table_attach(GTK_TABLE(page->table),
     page->eqn, 1, 2, 2, 3, (GTK_EXPAND | GTK_FILL), 0, 0, 0);
 
@@ -607,7 +605,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->fn = gtk_entry_new();
   gtk_widget_show(page->fn);
-  gtk_signal_connect(GTK_OBJECT(page->fn), "changed", GTK_SIGNAL_FUNC(on_change), page);
+  g_signal_connect(page->fn, "changed", G_CALLBACK(on_change), page);
   gtk_table_attach(GTK_TABLE(page->table),
     page->fn, 1, 2, 3, 4, (GTK_EXPAND | GTK_FILL), 0, 0, 0);
 
@@ -618,7 +616,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->pattern = gtk_entry_new();
   gtk_widget_show(page->pattern);
-  gtk_signal_connect(GTK_OBJECT(page->pattern), "changed", GTK_SIGNAL_FUNC(on_change), page);
+  g_signal_connect(page->pattern, "changed", G_CALLBACK(on_change), page);
   gtk_table_attach(GTK_TABLE(page->table),
     page->pattern, 1, 2, 4, 5, (GTK_EXPAND | GTK_FILL), 0, 0, 0);
 
@@ -638,7 +636,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->top_min = gtk_entry_new();
   gtk_widget_show(page->top_min);
-  gtk_signal_connect(GTK_OBJECT(page->top_min), "changed", GTK_SIGNAL_FUNC(on_top_min), page);
+  g_signal_connect(page->top_min, "changed", G_CALLBACK(on_top_min), page);
   gtk_box_pack_start(GTK_BOX(top_hbox), page->top_min, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Max"));
@@ -647,7 +645,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->top_max = gtk_entry_new();
   gtk_widget_show(page->top_max);
-  gtk_signal_connect(GTK_OBJECT(page->top_min), "changed", GTK_SIGNAL_FUNC(on_top_max), page);
+  g_signal_connect(page->top_min, "changed", G_CALLBACK(on_top_max), page);
   gtk_box_pack_start(GTK_BOX(top_hbox), page->top_max, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Bottom"));
@@ -666,7 +664,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->bot_min = gtk_entry_new();
   gtk_widget_show(page->bot_min);
-  gtk_signal_connect(GTK_OBJECT(page->bot_min), "changed", GTK_SIGNAL_FUNC(on_bot_min), page);
+  g_signal_connect(GTK_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_min), page);
   gtk_box_pack_start(GTK_BOX(bot_hbox), page->bot_min, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Max"));
@@ -675,7 +673,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->bot_max = gtk_entry_new();
   gtk_widget_show(page->bot_max);
-  gtk_signal_connect(GTK_OBJECT(page->bot_min), "changed", GTK_SIGNAL_FUNC(on_bot_max), page);
+  g_signal_connect(GTK_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_max), page);
   gtk_box_pack_start(GTK_BOX(bot_hbox), page->bot_max, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Scale"));
@@ -692,7 +690,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
     gtk_radio_button_new_with_label(scale_hbox_group, _("Linear"));
   scale_hbox_group =
     gtk_radio_button_group(GTK_RADIO_BUTTON(page->linear));
-  gtk_signal_connect(GTK_OBJECT(page->linear), "toggled", GTK_SIGNAL_FUNC(on_altered), page);
+  g_signal_connect(GTK_OBJECT(page->linear), "toggled", G_CALLBACK(on_altered), page);
   gtk_widget_show(page->linear);
   gtk_box_pack_start(GTK_BOX(scale_hbox), page->linear, FALSE, FALSE, 0);
 
@@ -740,10 +738,10 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_widget_show(page->solid);
   gtk_box_pack_start(GTK_BOX(type_hbox), page->solid, FALSE, FALSE, 0);
 
-  gtk_signal_connect(GTK_OBJECT(page->indicator), "toggled", GTK_SIGNAL_FUNC(on_type_toggle), page);
-  gtk_signal_connect(GTK_OBJECT(page->line), "toggled", GTK_SIGNAL_FUNC(on_type_toggle), page);
-  gtk_signal_connect(GTK_OBJECT(page->point), "toggled", GTK_SIGNAL_FUNC(on_type_toggle), page);
-  gtk_signal_connect(GTK_OBJECT(page->solid), "toggled", GTK_SIGNAL_FUNC(on_type_toggle), page);
+  g_signal_connect(GTK_OBJECT(page->indicator), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(GTK_OBJECT(page->line), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(GTK_OBJECT(page->point), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(GTK_OBJECT(page->solid), "toggled", G_CALLBACK(on_type_toggle), page);
 
   label = gtk_label_new(_("Color"));
   gtk_widget_show(label);
@@ -972,8 +970,8 @@ create_editor(Chart_app *app)
   app->editor = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(app->editor), _("Parameter Editor"));
   gtk_window_set_position(GTK_WINDOW(app->editor), GTK_WIN_POS_NONE);
-  gtk_signal_connect(GTK_OBJECT(app->editor),
-    "delete-event", GTK_SIGNAL_FUNC(on_editor_delete), NULL);
+  g_signal_connect(GTK_OBJECT(app->editor),
+    "delete-event", G_CALLBACK(on_editor_delete), NULL);
 
   edit_vbox = gtk_vbox_new(FALSE, 0);
   gtk_widget_show(edit_vbox);
@@ -981,8 +979,8 @@ create_editor(Chart_app *app)
 #else
   app->editor = gnome_dialog_new(_("Parameters"), NULL);
   gnome_dialog_close_hides(GNOME_DIALOG(app->editor), TRUE);
-  gtk_signal_connect(GTK_OBJECT(app->editor),
-    "delete-event", (GtkSignalFunc)on_editor_delete, NULL);
+  g_signal_connect(GTK_OBJECT(app->editor),
+    "delete-event", G_CALLBACK(on_editor_delete), NULL);
   edit_vbox = GNOME_DIALOG(app->editor)->vbox;
 #endif
 
@@ -1002,8 +1000,8 @@ create_editor(Chart_app *app)
     GTK_WIDGET(app->notebook), TRUE, TRUE, 0);
   gtk_notebook_set_tab_pos(app->notebook, GTK_POS_BOTTOM);
 
-  gtk_signal_connect(GTK_OBJECT(app->notebook),
-    "switch_page", GTK_SIGNAL_FUNC(on_notebook_switch_page), app);
-  gtk_signal_connect(GTK_OBJECT(edit_menubar_uiinfo[1].widget),
-    "activate", GTK_SIGNAL_FUNC(on_edit_menu), app);
+  g_signal_connect(GTK_OBJECT(app->notebook),
+    "switch_page", G_CALLBACK(on_notebook_switch_page), app);
+  g_signal_connect(GTK_OBJECT(edit_menubar_uiinfo[1].widget),
+    "activate", G_CALLBACK(on_edit_menu), app);
 }

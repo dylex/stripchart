@@ -22,12 +22,11 @@
 #include <gtk/gtk.h>
 #include <gtk/gtkdrawingarea.h>
 
-#define CHART(obj) \
-	(GTK_CHECK_CAST((obj), chart_get_type(), Chart))
-#define IS_CHART(obj) \
-	(GTK_CHECK_TYPE((obj), chart_get_type()))
-#define CHART_CLASS(klass) \
-	(GTK_CHECK_CLASS_CAST((klass), chart_get_type(), ChartClass))
+#define TYPE_CHART			(chart_get_type())
+#define CHART(obj) 			(G_TYPE_CHECK_INSTANCE_CAST((obj), TYPE_CHART, Chart))
+#define IS_CHART(obj) 			(G_TYPE_CHECK_INSTANCE_TYPE((obj), TYPE_CHART))
+#define CHART_CLASS(klass) 		(G_TYPE_CHECK_CLASS_CAST((klass), TYPE_CHART, ChartClass))
+#define IS_CHART_CLASS(klass) 		(G_TYPE_CHECK_CLASS_TYPE((klass), TYPE_CHART))
 
 typedef struct _Chart		Chart;
 typedef struct _ChartClass	ChartClass;
@@ -105,7 +104,7 @@ struct _ChartDatum
   GdkColor *gdk_color;
 };
 
-guint chart_get_type(void);
+GType chart_get_type(void);
 
 void chart_set_interval(Chart *chart, guint msec);
 

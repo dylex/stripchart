@@ -17,7 +17,7 @@
 
 #include "chart-app.h"
 #include <string.h>
-#include <mcheck.h>
+// #include <mcheck.h>
 
 char *prog_name;
 char *config_fn = NULL;
@@ -73,7 +73,7 @@ int geometry_x = -1, geometry_y = -1;
 int
 main(int argc, char *argv[])
 {
-	mtrace();
+	// mtrace();
 
   Chart_app *app;
 
@@ -86,7 +86,7 @@ main(int argc, char *argv[])
 
   app = chart_app_new();
   app->frame = gnome_app_new("stripchart", _("Stripchart"));
-  gtk_window_set_default_size(GTK_WINDOW(app->frame), 241, 50);
+  gtk_window_set_default_size(GTK_WINDOW(app->frame), 360, 50);
   //gtk_widget_set_uposition(app->frame, geometry_x, geometry_y);
   gtk_widget_show(app->frame);
   gtk_signal_connect(GTK_OBJECT(app->frame), "destroy", GTK_SIGNAL_FUNC(quit_event), NULL);

@@ -20,12 +20,11 @@
 
 #include "chart.h"
 
-#define STRIP(obj) \
-	(GTK_CHECK_CAST((obj), strip_get_type(), Strip))
-#define IS_STRIP(obj) \
-	(GTK_CHECK_TYPE((obj), strip_get_type()))
-#define STRIP_CLASS(klass) \
-	(GTK_CHECK_CLASS_CAST((klass), strip_get_type(), StripClass))
+#define TYPE_STRIP			(strip_get_type())
+#define STRIP(obj) 			(G_TYPE_CHECK_INSTANCE_CAST((obj), TYPE_STRIP, Strip))
+#define IS_STRIP(obj) 			(G_TYPE_CHECK_INSTANCE_TYPE((obj), TYPE_STRIP))
+#define STRIP_CLASS(klass) 		(G_TYPE_CHECK_CLASS_CAST((klass), TYPE_STRIP, StripClass))
+#define IS_STRIP_CLASS(klass) 		(G_TYPE_CHECK_CLASS_TYPE((klass), TYPE_STRIP))
 
 typedef struct _Strip		Strip;
 typedef struct _StripClass	StripClass;
@@ -41,7 +40,7 @@ struct _StripClass
   ChartClass parent_class;
 };
 
-guint strip_get_type(void);
+GType strip_get_type(void);
 
 GtkWidget *strip_new(void);
 

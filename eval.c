@@ -25,6 +25,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/sysctl.h>
+#ifdef __FreeBSD__
+#include <sys/resource.h>
+#endif
 
 #include "chart-app.h"
 #include "chart.h"
@@ -302,6 +306,40 @@ evaluate_equation(Expr *expr)
 	expr->val = stat_value(skipbl(expr->filename + 1));
       else if (*expr->filename == '|')
 	fd = popen(expr->filename + 1, "r");
+#ifdef __FreeBSD__
+      else if (*expr->filename == '=')
+      {
+	char buf[64];
+	size_t len = sizeof(buf);
+	if (sysctlbyname(expr->filename+1, buf, &len, NULL, 0) != 0)
+	{
+		eval_error(expr, "sysctl: error getting '%s': %s", expr->filename, strerror(errno));
+		return 0;
+	}
+	  switch (len)
+	  {
+	    case 4:
+		    if (expr->vars)
+			    expr->now[0] = *(int *)buf;
+		    break;
+	    case 8:
+		    if (expr->vars)
+			    expr->now[0] = *(long long *)buf;
+		    break;
+	    case sizeof(struct loadavg):
+	    {
+		    struct loadavg *tv = (struct loadavg *)buf;
+		    int i = 0;
+		    for (i = 0; i < MIN(expr->vars, 3); i++)
+			    expr->now[i] = (double)tv->ldavg[0]/(double)tv->fscale;
+		    break;
+            }
+	    default:
+	      eval_error(expr, "sysctl: unknown size: %zu", len);
+	      return 0;
+	  }
+      }
+#endif
       else
 	fd = fopen(expr->filename, "r");
 

@@ -45,6 +45,9 @@ strip_redraw(Strip *strip)
       if (plot == chart_plot_indicator)
 	continue;
 
+      if (datum->colors == 0)
+	      continue;
+
       x = width - datum->idle - 1;
       points = datum->history_count;
       for (i = 0; i < points && 0 <= x; i++)
@@ -207,7 +210,7 @@ strip_update(Strip *strip)
   show_ticks = strip->show_ticks;
 }
 
-static gint
+static gboolean
 strip_expose(GtkWidget *widget, GdkEventExpose *event, void *nil)
 {
   Strip *strip = STRIP(widget);
@@ -245,45 +248,34 @@ strip_set_default_history_size(Strip *strip, gint size)
 }
 
 static void
-strip_init(Chart *chart)
+strip_init(Strip *strip)
 {
-  chart->default_history_size = 100;
-  strip_set_ticks(STRIP(chart), FALSE, 5, 12);
+  CHART(strip)->default_history_size = 100;
+  strip_set_ticks(strip, FALSE, 5, 12);
+
+  g_signal_connect(strip, "expose_event", G_CALLBACK(strip_expose), NULL);
+  g_signal_connect(strip, "configure_event", G_CALLBACK(strip_configure), NULL);
+  g_signal_connect(strip, "chart_post_update", G_CALLBACK(strip_update), NULL);
 }
 
-guint
+GType
 strip_get_type(void)
 {
-  static guint gc_type = 0;
-  if (!gc_type)
-    {
-      GtkTypeInfo gc_info =
-      {
-	"Strip",
-	sizeof(Strip),
-	sizeof(StripClass),
-	(GtkClassInitFunc)NULL,
-	(GtkObjectInitFunc)strip_init,
-	NULL,
-	NULL,
-	(GtkClassInitFunc)NULL
-      };
-      gc_type = gtk_type_unique(chart_get_type(), &gc_info);
-    }
-  return gc_type;
+  static GType type = 0;
+  if (type)
+	  return type;
+  static const GTypeInfo info = {
+	  .class_size = sizeof(StripClass),
+	  .class_init = (GClassInitFunc)NULL,
+	  .instance_size = sizeof(Strip),
+	  .instance_init = (GInstanceInitFunc)strip_init
+  };
+  type = g_type_register_static(TYPE_CHART, "Strip", &info, 0);
+  return type;
 }
 
 GtkWidget *
 strip_new(void)
 {
-  Strip *strip = STRIP(gtk_type_new(strip_get_type()));
-
-  gtk_signal_connect(GTK_OBJECT(strip),
-    "expose_event", (GtkSignalFunc)strip_expose, NULL);
-  gtk_signal_connect(GTK_OBJECT(strip),
-    "configure_event", (GtkSignalFunc)strip_configure, NULL);
-  gtk_signal_connect(GTK_OBJECT(strip),
-    "chart_post_update", (GtkSignalFunc)strip_update, NULL);
-
-  return GTK_WIDGET(strip);
+  return gtk_widget_new(TYPE_STRIP, NULL);
 }
