@@ -8,6 +8,11 @@ stripchart: stripchart.o chart-app.o prefs.o utils.o params.o strip.o chart.o ev
 Makefile.dep: *.c
 	$(CC) -MM $(CFLAGS) $^ > Makefile.dep
 
+$(HOME)/bin/stripchart: stripchart
+	install $< $@
+
+install: $(HOME)/bin/stripchart
+
 clean: 
 	rm -f *.o stripchart
 

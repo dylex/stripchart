@@ -1,5 +1,6 @@
 /* Stripchart -- the gnome-utils stripchart plotting utility
  * Copyright (C) 2000 John Kodis <kodis@jagunet.com>
+ * vim:sts=2:sw=2
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -13,7 +14,12 @@
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
  */
+
+#ifdef __FreeBSD__
+#define HAVE_SYSCTL 1
+#endif
 
 #include <ctype.h>
 #include <errno.h>
@@ -26,7 +32,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/sysctl.h>
-#ifdef __FreeBSD__
+#if HAVE_SYSCTL
 #include <sys/resource.h>
 #endif
 
@@ -54,6 +60,14 @@ skipbl(char *s)
   return s;
 }
 
+#if HAVE_SYSCTL
+struct fn_sysctl {
+  char tag; /* '=' */
+  size_t len;
+  int mib[/*len*/];
+};
+#endif
+
 /*
  * Expr -- the info required to evaluate an expression.
  */
@@ -67,7 +81,8 @@ typedef struct
   jmp_buf err_jmp;
 
   double *filter;
-  char *equation, *filename, *pattern;
+  char *filename;
+  char *equation, *pattern;
 
   int pass;
   double val;
@@ -306,38 +321,39 @@ evaluate_equation(Expr *expr)
 	expr->val = stat_value(skipbl(expr->filename + 1));
       else if (*expr->filename == '|')
 	fd = popen(expr->filename + 1, "r");
-#ifdef __FreeBSD__
+#if HAVE_SYSCTL
       else if (*expr->filename == '=')
       {
+	struct fn_sysctl *fn = (struct fn_sysctl *)expr->filename;
 	char buf[64];
 	size_t len = sizeof(buf);
-	if (sysctlbyname(expr->filename+1, buf, &len, NULL, 0) != 0)
+	if (sysctl(fn->mib, fn->len, buf, &len, NULL, 0) != 0)
 	{
-		eval_error(expr, "sysctl: error getting '%s': %s", expr->filename, strerror(errno));
-		return 0;
+	  fprintf(stderr, "sysctl error: %s\n", strerror(errno));
+	  return 0;
 	}
-	  switch (len)
-	  {
-	    case 4:
-		    if (expr->vars)
-			    expr->now[0] = *(int *)buf;
-		    break;
-	    case 8:
-		    if (expr->vars)
-			    expr->now[0] = *(long long *)buf;
-		    break;
-	    case sizeof(struct loadavg):
+	switch (len)
+	{
+	  case 4:
+	    if (expr->vars)
+	      expr->now[0] = *(int *)buf;
+	    break;
+	  case 8:
+	    if (expr->vars)
+	      expr->now[0] = *(long long *)buf;
+	    break;
+	  case sizeof(struct loadavg):
 	    {
-		    struct loadavg *tv = (struct loadavg *)buf;
-		    int i = 0;
-		    for (i = 0; i < MIN(expr->vars, 3); i++)
-			    expr->now[i] = (double)tv->ldavg[0]/(double)tv->fscale;
-		    break;
-            }
-	    default:
-	      eval_error(expr, "sysctl: unknown size: %zu", len);
-	      return 0;
-	  }
+	      struct loadavg *tv = (struct loadavg *)buf;
+	      int i = 0;
+	      for (i = 0; i < MIN(expr->vars, 3); i++)
+		expr->now[i] = (double)tv->ldavg[i]/(double)tv->fscale;
+	      break;
+	    }
+	  default:
+	    fprintf(stderr, "sysctl: unknown size for '%s': %zu\n", expr->filename, len);
+	    return 0;
+	}
       }
 #endif
       else
@@ -391,42 +407,55 @@ evaluate_equation(Expr *expr)
 static char *
 expand_env(char *src)
 {
-  if (src)
+  if (!src)
+    return NULL;
+#if HAVE_SYSCTL
+  if (*src == '=')
+  {
+    static int name[CTL_MAXNAME];
+    size_t namelen = CTL_MAXNAME;
+    if (sysctlnametomib(src+1, name, &namelen) != 0)
     {
-      char *exp, *dst, *key, *val, *tmp;
-      exp = dst = g_malloc(strlen(src) + 1);
-      while (1)
-	switch (*src)
-	  {
-	  default:
-	    *dst++ = *src++;
-	    break;
-	  case '\0':
-	    *dst = '\0';
-	    return exp;
-	  case '$':
-	    key = val = g_strdup(src);
-	    for (tmp = dst, *tmp++ = *val++; isalnum(*tmp++ = *val++); )
-	      ;
-	    *--val = '\0';
-	    if ((val = getenv(key + 1)) == NULL)
-	      dst = tmp;
-	    else
-	      {
-		*dst = '\0';
-		tmp = g_malloc(strlen(exp) + strlen(val) + strlen(src) + 1);
-		strcpy(tmp, exp);
-		strcpy(tmp + strlen(tmp), val);
-		g_free(exp);
-		exp = tmp;
-		dst = exp + strlen(exp);
-	      }
-	    src += strlen(key);
-	    g_free(key);
-	    break;
-	  }
+      fprintf(stderr, "error looking up sysctl '%s': %s\n", src, strerror(errno));
+      return NULL;
     }
-  return NULL;
+    struct fn_sysctl *mib = g_malloc(sizeof(struct fn_sysctl) + namelen * sizeof(int));
+    mib->tag = *src;
+    mib->len = namelen;
+    memcpy(mib->mib, name, namelen * sizeof(int));
+    return (char *)mib;
+  }
+#endif
+  char *exp, *dst, *key, *val, *tmp;
+  exp = dst = g_malloc(strlen(src) + 1);
+  while (*src)
+  {
+    if (*src == '$')
+    {
+      key = val = g_strdup(src);
+      for (tmp = dst, *tmp++ = *val++; isalnum(*tmp++ = *val++); )
+	;
+      *--val = '\0';
+      if ((val = getenv(key + 1)) == NULL)
+	dst = tmp;
+      else
+      {
+	*dst = '\0';
+	tmp = g_malloc(strlen(exp) + strlen(val) + strlen(src) + 1);
+	strcpy(tmp, exp);
+	strcpy(tmp + strlen(tmp), val);
+	g_free(exp);
+	exp = tmp;
+	dst = exp + strlen(exp);
+      }
+      src += strlen(key);
+      g_free(key);
+    }
+    else
+      *dst++ = *src++;
+  }
+  *dst = '\0';
+  return exp;
 }
 
 static void
