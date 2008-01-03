@@ -50,38 +50,23 @@ digit_shift(char *str, char *digits, int width, int dpos)
  * hi_lo_fmt -- formats a hi and lo value to the same magnitude.
  */
 static void
-hi_lo_fmt(double hv, char *hs, double lv, char *ls)
+val_fmt(double v, char *vs)
 {
-  int e, p, t, f;
-  char s[100];
+  int e, p, t;
+  char s[50];
 
-  sprintf(s, "% 22.16e", hv);
+  sprintf(s, "% 22.16e", v);
   e = atoi(s+20);
   s[2] = s[1]; s[1] = '0';
-  t = 3 * ((e - (e < 0)) / 3);
-  p = e - t;
-  hs[0] = s[0];
-  digit_shift(hs+1, s+2, 4, p);
-  hs[6] = '\0';
+  t = ((e - (e < 0)) / 3);
+  p = e - 3*t;
+  vs[0] = s[0];
+  digit_shift(vs+1, s+2, 4, p);
+  vs[6] = '\0';
   if (0 <= t && t <= 5)
-    hs[5] = "\0KMGTP"[t/3];
+    vs[5] = "\0KMGTP"[t];
   else
-    sprintf(hs+5, "e%+d", t);
-
-  if (ls)
-    {
-      sprintf(s, "% 22.16e", lv);
-      f = atoi(s+20);
-      s[2] = s[1]; s[1] = '0';
-      p = f - t;
-      ls[0] = s[0];
-      digit_shift(ls+1, s+2, 4, p);
-      ls[6] = '\0';
-      if (0 <= t && t <= 5)
-	ls[5] = "\0KMGTP"[t/3];
-      else
-	sprintf(ls+5, "e%+d", t);
-    }
+    sprintf(vs+5, "e%d", 3*t);
 }
 
 static char *
@@ -107,9 +92,9 @@ text_load_clist(Chart_app *app)
 
   while ((nb_page = gtk_notebook_get_nth_page(app->notebook, p)) != NULL)
     {
-      double top, val;
-      char *row_strs[4];
-      char val_str[100], top_str[100];
+      double top, bot, val;
+      char *row_strs[5];
+      char val_str[50], top_str[50], bot_str[50];
       Param_page *page = gtk_object_get_user_data(GTK_OBJECT(nb_page));
       ChartDatum *datum = page->strip_data;
 
@@ -117,12 +102,16 @@ text_load_clist(Chart_app *app)
 	{
 	  row_strs[0] = gtk_editable_get_chars(GTK_EDITABLE(page->name), 0,-1);
 	  row_strs[1] = val_str;
-	  row_strs[2] = top_str;
-	  row_strs[3] = param_type_str(page);
+	  row_strs[2] = param_type_str(page);
+	  row_strs[3] = bot_str;
+	  row_strs[4] = top_str;
 
 	  top = datum->adj->upper;
+	  bot = datum->adj->lower;
 	  val = datum->history[datum->newest];
-	  hi_lo_fmt(top, top_str, val, val_str);
+	  val_fmt(top, top_str);
+	  val_fmt(val, val_str);
+	  val_fmt(bot, bot_str);
 	  gtk_clist_append(GTK_CLIST(app->text_clist), row_strs);
 	  gtk_clist_set_foreground(GTK_CLIST(app->text_clist), row, &page->strip_data->gdk_color[0]);
 	  gtk_clist_set_background(GTK_CLIST(app->text_clist), row, &app->text_window->style->bg[0]);
@@ -159,8 +148,9 @@ on_show_values(GtkWidget *unused, Chart_app *app)
       char *titles[] = {
 	      "Param",
 	      "Current",
-	      "Top",
-	      "Scale"
+	      "Scale",
+	      "Bot",
+	      "Top"
       };
       int i;
 

@@ -1,5 +1,5 @@
-PKGS=libgnomeui-2.0
-CFLAGS = -g -Wall $(shell pkg-config $(PKGS) --cflags) -DGTK_ENABLE_BROKEN
+PKGS=libgnomeui-2.0 libxml-2.0
+CFLAGS = -g -Wall $(shell pkg-config $(PKGS) --cflags) -DGTK_ENABLE_BROKEN -D_GNU_SOURCE=1
 LDFLAGS=$(shell pkg-config $(PKGS) --libs)
 
 stripchart: stripchart.o chart-app.o prefs.o utils.o params.o strip.o chart.o eval.o

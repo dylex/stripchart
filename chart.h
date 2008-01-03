@@ -87,13 +87,11 @@ struct _ChartDatum
   gdouble max, min; /* of current window's worth of history values */
   gdouble top_max, top_min;
   gdouble bot_max, bot_min; /* Adjustment limits */
+  gboolean rescale;
   ChartAdjustment *adj; /* Adjustement */
 
   gdouble (*user_func)(void *user_data);
   void *user_data;
-
-  gint (*range_func)(void *range_data);
-  void *range_data;
 
   ChartScaleStyle scale_style;
   ChartPlotStyle plot_style; /* FIX THIS: only strips have plot_styles */
@@ -115,10 +113,7 @@ ChartDatum *chart_parameter_add(Chart *chart,
 
 void chart_parameter_deactivate(Chart *chart, ChartDatum *param);
 
-gint chart_rescale_by_decade(ChartDatum *datum);
-gint chart_rescale_by_125(ChartDatum *datum);
-
-void chart_set_autorange(ChartDatum *param, gint (*func)(), void *data);
+void chart_set_autorange(ChartDatum *param, gboolean rescale);
 
 void chart_set_top_min(ChartDatum *datum, gdouble top_min);
 void chart_set_top_max(ChartDatum *datum, gdouble top_max);

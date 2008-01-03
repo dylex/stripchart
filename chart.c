@@ -93,116 +93,64 @@ chart_get_type(void)
   return type;
 }
 
-typedef struct
+static guint chart_range(gdouble *bound, gdouble val, gdouble min, gdouble max, gboolean side)
 {
-  gint top_index, bot_index, ranges, step;
-  gdouble *range;
-}
-Range;
+	gdouble in = side ? max : min;
+	gdouble out = side ? min : max;
+	gdouble b;
+	if (side ? val >= in : val <= in)
+		b = in;
+	else if (side ? val <= out : val >= out)
+		b = out;
+	else if (min < 0 && max > 0)
+		b = val;
+	else if (val == 0)
+		b = 0;
+	else
+	{
+		gboolean dir = side ^ (val < 0);
 
-static gint
-chart_rescale_by_table(ChartDatum *datum, gdouble *table, gint nels, gint step)
-{
-  gint j, changed = 0;
-  gdouble top, bot, last_upper;
-  Range *r = (Range *)datum->range_data;
+		double l = log10(fabs(in)); l -= floor(l);
+		if (l == 0 || l == log10(2) || l == log10(5))
+		{
+			l = log10(fabs(val));
+			double i = floor(l);
+			l -= i;
+			if (l <= 0) 		l = 0;
+			else if (l < log10(2)) 	l = dir ? 0 : log10(2);
+			else if (l <= log10(2)) l = log10(2);
+			else if (l < log10(5)) 	l = dir ? log10(2) : log10(5);
+			else if (l <= log10(5)) l = log10(5);
+			else 			l = dir ? log10(5) : 1;
+			b = exp10(i+l);
+		}
+		else
+		{
+			l = log2(fabs(val));
+			double i = floor(l);
+			if (l > i && !dir) i++;
+			b = exp2(i);
+		}
 
-  if (r == NULL)
-    {
-      r = g_malloc(sizeof(Range));
-      r->range = table;
-      r->ranges = nels;
-      r->step = step;
-      r->top_index = r->bot_index = r->ranges / 2;
-      datum->range_data = r;
-    }
+		b = copysign(b, val);
+		if (side ? b <= out : b >= out)
+			b = out;
+	}
 
-  /* Put top above max and top_min, but not above top_max or end of
-     table. */
-  j = r->top_index;
-  last_upper = datum->adj->upper;
-  top = MAX(datum->max, datum->top_min);
-  while (table[r->top_index] <= top
-    && r->top_index + step < r->ranges
-    && table[r->top_index + step] <= datum->top_max)
-    {
-      r->top_index += step;
-      changed++;
-    }
-
-  /* Put top to lowest value above max, but above top_min and start of
-     table. */
-  bot = MIN(datum->max, datum->top_max);
-  while (step <= r->top_index
-    && bot < table[r->top_index - step]
-    && datum->top_min <= table[r->top_index - step])
-    {
-      r->top_index -= step;
-      changed++;
-    }
-
-  /* Set the new upper adjustment value.  The new value will be on of
-     table[r->top_index], top_min, or top_max.  If a user-supplied
-     top_max is available, we use that as the outer limit.  */
-  datum->adj->upper = table[r->top_index];
-  if (top > table[r->top_index] && table[r->top_index] < datum->top_max)
-    datum->adj->upper = datum->top_max;
-  else if (step <= r->top_index
-    && bot < table[r->top_index-step]
-    && table[r->top_index-step] < datum->top_min)
-    {
-      datum->adj->upper = datum->top_min;
-      if (!changed && last_upper != datum->adj->upper)
-	changed = -1;
-    }
-
-#ifdef DEBUG
-  if (changed)
-    printf("changed: %p=%2dx%d, %g..%g; %g(%d) -> %g(%d): %g\n",
-      datum, changed, step, datum->min, datum->max,
-      table[j], j, table[r->top_index], r->top_index, datum->adj->upper);
-#endif
-
-  return changed;
+	if (b != *bound)
+	{
+		*bound = b;
+		return 1;
+	}
+	return 0;
 }
 
-static gdouble
-chart_decade_125[] =
+static guint chart_rescale_range(ChartDatum *datum)
 {
-  1e-30, 2e-30, 5e-30, 1e-29, 2e-29, 5e-29, 1e-28, 2e-28, 5e-28,
-  1e-27, 2e-27, 5e-27, 1e-26, 2e-26, 5e-26, 1e-25, 2e-25, 5e-25,
-  1e-24, 2e-24, 5e-24, 1e-23, 2e-23, 5e-23, 1e-22, 2e-22, 5e-22,
-  1e-21, 2e-21, 5e-21, 1e-20, 2e-20, 5e-20, 1e-19, 2e-19, 5e-19,
-  1e-18, 2e-18, 5e-18, 1e-17, 2e-17, 5e-17, 1e-16, 2e-16, 5e-16,
-  1e-15, 2e-15, 5e-15, 1e-14, 2e-14, 5e-14, 1e-13, 2e-13, 5e-13,
-  1e-12, 2e-12, 5e-12, 1e-11, 2e-11, 5e-11, 1e-10, 2e-10, 5e-10,
-  1e-09, 2e-09, 5e-09, 1e-08, 2e-08, 5e-08, 1e-07, 2e-07, 5e-07,
-  1e-06, 2e-06, 5e-06, 1e-05, 2e-05, 5e-05, 1e-04, 2e-04, 5e-04,
-  1e-03, 2e-03, 5e-03, 1e-02, 2e-02, 5e-02, 1e-01, 2e-01, 5e-01,
-  1e+00, 2e+00, 5e+00, 1e+01, 2e+01, 5e+01, 1e+02, 2e+02, 5e+02,
-  1e+03, 2e+03, 5e+03, 1e+04, 2e+04, 5e+04, 1e+05, 2e+05, 5e+05,
-  1e+06, 2e+06, 5e+06, 1e+07, 2e+07, 5e+07, 1e+08, 2e+08, 5e+08,
-  1e+09, 2e+09, 5e+09, 1e+10, 2e+10, 5e+10, 1e+11, 2e+11, 5e+11,
-  1e+12, 2e+12, 5e+12, 1e+13, 2e+13, 5e+13, 1e+14, 2e+14, 5e+14,
-  1e+15, 2e+15, 5e+15, 1e+16, 2e+16, 5e+16, 1e+17, 2e+17, 5e+17,
-  1e+18, 2e+18, 5e+18, 1e+19, 2e+19, 5e+19, 1e+20, 2e+20, 5e+20,
-  1e+21, 2e+21, 5e+21, 1e+22, 2e+22, 5e+22, 1e+23, 2e+23, 5e+23,
-  1e+24, 2e+24, 5e+24, 1e+25, 2e+25, 5e+25, 1e+26, 2e+26, 5e+26,
-  1e+27, 2e+27, 5e+27, 1e+28, 2e+28, 5e+28, 1e+29, 2e+29, 5e+29, 1e+30, 
-};
-
-gint
-chart_rescale_by_125(ChartDatum *datum)
-{
-  return chart_rescale_by_table(datum,
-    chart_decade_125, sizeof(chart_decade_125) / sizeof(*chart_decade_125), 1);
-}
-
-gint
-chart_rescale_by_decade(ChartDatum *datum)
-{
-  return chart_rescale_by_table(datum,
-    chart_decade_125, sizeof(chart_decade_125) / sizeof(*chart_decade_125), 3);
+	guint changed = 0;
+	changed += chart_range(&datum->adj->upper, datum->max, datum->top_min, datum->top_max, 0);
+	changed += chart_range(&datum->adj->lower, datum->min, datum->bot_min, datum->bot_max, 1);
+	return changed;
 }
 
 void
@@ -263,7 +211,7 @@ chart_timer(Chart *chart)
 
       datum->history[datum->newest] = val;
 
-      if (datum->range_func)
+      if (datum->rescale)
 	{
 	  gint view = chart->points_in_view;
 	  gint idle = datum->idle;
@@ -283,7 +231,7 @@ chart_timer(Chart *chart)
 	      if (--h < 0)
 		h = datum->history_size - 1;
 	    }
-	  rescale += datum->range_func(datum);
+	  rescale += chart_rescale_range(datum);
 	}
     }
 
@@ -313,21 +261,20 @@ chart_parameter_add(Chart *chart,
   datum->chart = chart;
   datum->user_func = user_func;
   datum->user_data = user_data;
-  datum->range_func = NULL;
-  datum->range_data = NULL;
+  datum->rescale = FALSE;
   datum->active = TRUE;
   datum->idle = datum->newest = datum->history_count = 0;
 
   datum->top_max = top_max;
   datum->bot_max = bot_max;
   datum->top_min = top_min;
-  datum->bot_min = bot_max;
+  datum->bot_min = bot_min;
 
   if (adj == NULL)
   {
     adj = g_malloc(sizeof(*adj));
     adj->upper = datum->top_min;
-    adj->lower = datum->bot_min;
+    adj->lower = datum->bot_max;
   }
   datum->adj = adj;
 
@@ -377,10 +324,9 @@ chart_set_bot_min(ChartDatum *datum, double bot_min)
 }
 
 void
-chart_set_autorange(ChartDatum *datum, int (*range_func)(), void *range_data)
+chart_set_autorange(ChartDatum *datum, gboolean rescale)
 {
-  datum->range_func = range_func;
-  datum->range_data = range_data;
+  datum->rescale = rescale;
 }
 
 void
@@ -436,13 +382,9 @@ val2gdk(gdouble val, ChartAdjustment *adj, gint height, ChartScaleStyle scale)
 {
   gdouble y, delta = adj->upper - adj->lower;
 
-#ifndef HAVE_LOGF
-#define logf(x) ((float)log(x))
-#endif
-
   height--;
   if (scale == chart_scale_log)
-    y = height - (height * logf(1 + val - adj->lower) / logf(1 + delta));
+    y = height - (height * log1p(val - adj->lower) / log1p(delta));
   else
     y = height - height * (val - adj->lower) / delta;
 

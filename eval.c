@@ -518,8 +518,7 @@ chart_equation_add(Chart *chart,
     str_to_gdouble(desc->top_min, -G_MAXDOUBLE),
     str_to_gdouble(desc->top_max, +G_MAXDOUBLE));
 
-  if (rescale)
-    chart_set_autorange(datum, chart_rescale_by_125, NULL);
+  chart_set_autorange(datum, rescale);
 
   chart_set_scale_style(datum,
     desc ? str_to_scale_style(desc->scale) : chart_scale_linear);
