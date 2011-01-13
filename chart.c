@@ -34,21 +34,21 @@ chart_class_init(ChartClass *klass)
 		    G_TYPE_FROM_CLASS(object_class), G_SIGNAL_RUN_FIRST, 
 		    G_STRUCT_OFFSET(ChartClass, chart_pre_update),
 		    NULL, NULL,
-		    g_cclosure_marshal_VOID__VOID, GTK_TYPE_NONE, 0);
+		    g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0);
 
   chart_signals[POST_UPDATE] = 
     g_signal_new("chart_post_update", 
 		    G_TYPE_FROM_CLASS(object_class), G_SIGNAL_RUN_FIRST, 
 		    G_STRUCT_OFFSET(ChartClass, chart_post_update),
 		    NULL, NULL,
-		    g_cclosure_marshal_VOID__VOID, GTK_TYPE_NONE, 0);
+		    g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0);
 
   chart_signals[RESCALE] = 
     g_signal_new("chart_rescale", 
 		    G_TYPE_FROM_CLASS(object_class), G_SIGNAL_RUN_FIRST, 
 		    G_STRUCT_OFFSET(ChartClass, chart_rescale),
 		    NULL, NULL,
-		    g_cclosure_marshal_VOID__VOID, GTK_TYPE_NONE, 0);
+		    g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0);
 
   // gtk_object_class_add_signals(object_class, chart_signals, SIGNAL_COUNT);
   klass->chart_rescale = NULL;
@@ -60,7 +60,7 @@ chart_configure(GtkWidget *widget, GdkEvent *event, void *nil)
   CHART(widget)->points_in_view = widget->allocation.width;
 
   if (!CHART(widget)->colormap)
-    CHART(widget)->colormap = gdk_window_get_colormap(widget->window);
+    CHART(widget)->colormap = gdk_drawable_get_colormap(widget->window);
 }
 
 static void
@@ -166,7 +166,7 @@ chart_timer(Chart *chart)
   gint rescale = 0;
   GSList *list, *next;
 
-  gtk_signal_emit_by_name(GTK_OBJECT(chart), "chart_pre_update", NULL);
+  g_signal_emit_by_name(G_OBJECT(chart), "chart_pre_update", NULL);
 
   for (list = chart->param; list != NULL; list = g_slist_next(list))
     {
@@ -236,8 +236,8 @@ chart_timer(Chart *chart)
     }
 
   if (rescale)
-    gtk_signal_emit_by_name(GTK_OBJECT(chart), "chart_rescale", NULL);
-  gtk_signal_emit_by_name(GTK_OBJECT(chart), "chart_post_update", NULL);
+    g_signal_emit_by_name(G_OBJECT(chart), "chart_rescale", NULL);
+  g_signal_emit_by_name(G_OBJECT(chart), "chart_post_update", NULL);
 
   return TRUE;
 }
@@ -246,14 +246,14 @@ void
 chart_set_interval(Chart *chart, guint msec)
 {
   if (chart->timer)
-    gtk_timeout_remove(chart->timer);
-  chart->timer = gtk_timeout_add(msec, (GtkFunction)chart_timer, chart);
+    g_source_remove(chart->timer);
+  chart->timer = g_timeout_add(msec, (GtkFunction)chart_timer, chart);
 }
 
 ChartDatum *
 chart_parameter_add(Chart *chart,
   gdouble (*user_func)(), gpointer user_data,
-  gchar *color_names, ChartAdjustment *adj, int pageno,
+  const gchar *color_names, ChartAdjustment *adj, int pageno,
   gdouble bot_min, gdouble bot_max, gdouble top_min, gdouble top_max)
 {
   ChartDatum *datum = g_malloc(sizeof(*datum));
@@ -344,7 +344,8 @@ chart_set_plot_style(ChartDatum *datum, ChartPlotStyle plot_style)
 void
 chart_assign_color(Chart *chart, ChartDatum *datum)
 {
-  gchar *names, *color = NULL, *whitespace = " \t\r\n";
+  gchar *names, *color = NULL;
+  static const gchar *whitespace = " \t\r\n";
   GdkColor default_fg = GTK_WIDGET(chart)->style->fg[GTK_WIDGET_STATE(chart)];
 
   datum->colors = 0;
@@ -363,10 +364,11 @@ chart_assign_color(Chart *chart, ChartDatum *datum)
 
       if (!color || !gdk_color_parse(color, &datum->gdk_color[cnum]))
 	{
-	  g_warning("Unknown color: (%s); Using default fg color.", color);
+	  if (color)
+	    g_warning("Unknown color: (%s); Using default fg color.", color);
 	  datum->gdk_color[cnum] = default_fg;
 	}
-      gdk_color_alloc(chart->colormap, &datum->gdk_color[cnum]);
+      gdk_colormap_alloc_color(chart->colormap, &datum->gdk_color[cnum], FALSE, TRUE);
       datum->gdk_gc[cnum] = gdk_gc_new(GTK_WIDGET(chart)->window);
       gdk_gc_set_foreground(datum->gdk_gc[cnum], &datum->gdk_color[cnum]);
     }

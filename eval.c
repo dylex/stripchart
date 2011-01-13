@@ -41,15 +41,6 @@
 #include "strip.h"
 
 /*
- * strmatch -- case-blind match for tag at front of str.
- */
-static int
-strmatch(const char *tag, const char *str)
-{
-  return str && !strncasecmp(tag, str, strlen(tag));
-}
-
-/*
  * skipbl -- skips over leading whitespace in a string.
  */
 static char *
@@ -100,18 +91,12 @@ Expr;
 static void
 eval_error(Expr *expr, char *msg, ...)
 {
-  int len;
   va_list args;
-  static char err_msg[1000];
+  const char *err_msg;
 
-  fflush(stdout);
   va_start(args, msg);
-  len = sprintf(err_msg, "%s: ", prog_name);
-  len += vsprintf(err_msg + len, msg, args);
-  fprintf(stderr, "%s\n", err_msg);
+  err_msg = verror(msg, args);
   va_end(args);
-
-  gnome_dialog_run(GNOME_DIALOG(gnome_error_dialog(err_msg)));
 
   expr->val = 0.0;
   expr->error = g_strdup(err_msg);
@@ -157,7 +142,7 @@ num_op(Expr *expr)
       if (*expr->s == ')')
 	stripbl(expr, 1);
       else
-	eval_error(expr, _("closing parenthesis expected"));
+	eval_error(expr, ("closing parenthesis expected"));
     }
   else if (*expr->s == '$' || *expr->s == '~')
     {
@@ -174,7 +159,7 @@ num_op(Expr *expr)
 	{
 	  int id_num = atoi(id);
 	  if (id_num > expr->vars)
-	    eval_error(expr, _("no such field: %d"), id_num);
+	    eval_error(expr, ("no such field: %d"), id_num);
 	  val = expr->now[id_num-1];
 	  if (id_intro == '~')
 	    val -= expr->last[id_num-1];
@@ -194,13 +179,13 @@ num_op(Expr *expr)
 	    }
 	}
       else if (!*id)
-	eval_error(expr, _("missing variable identifer"));
+	eval_error(expr, ("missing variable identifer"));
       else
-	eval_error(expr, _("invalid variable identifer: %s"), id);
+	eval_error(expr, ("invalid variable identifer: %s"), id);
       stripbl(expr, 0);
     }
   else
-    eval_error(expr, _("number expected"));
+    eval_error(expr, ("number expected"));
 
   return val;
 }
@@ -271,7 +256,7 @@ eval(Expr *expr)
   stripbl(expr, 0);
   expr->val = add_op(expr);
   if (*expr->s && *expr->s != ';')
-    eval_error(expr, _("extra junk at end: \"%s\""), expr->s);
+    eval_error(expr, ("extra junk at end: \"%s\""), expr->s);
 
   return 0;
 }
@@ -471,7 +456,7 @@ free_expr(Expr *expr)
 
 ChartDatum *
 chart_equation_add(Chart *chart,
-  Param_group *group, Param_desc *desc, ChartAdjustment *adj,
+  Param_group *group, const Param_desc *desc, ChartAdjustment *adj,
   int pageno, int rescale)
 {
   char *s;

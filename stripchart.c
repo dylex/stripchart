@@ -17,88 +17,52 @@
 
 #include "chart-app.h"
 #include <string.h>
-// #include <mcheck.h>
+#include <gnome.h>
 
 char *prog_name;
 char *config_fn = NULL;
 const char *geometry = NULL;
 
-static gboolean quit_event(GtkWidget *widget, GdkEvent *event, gpointer data)
+static
+GOptionEntry option_entries[] =
 {
-	gtk_main_quit();
-	return FALSE;
-}
-
-static int
-proc_arg(int opt, const char *arg)
-{
-  switch (opt)
-    {
-    case 'f':
-      config_fn = strdup(arg);
-      break;
-    case 'g':
-      geometry = arg;
-      break;
-    }
-  return 0;
-}
-
-void
-popt_arg_extractor(
-  poptContext state, enum poptCallbackReason reason,
-  const struct poptOption *opt, const char *arg, void *data )
-{
-  if (proc_arg(opt->val, arg))
-    {
-      poptPrintUsage(state, stderr, 0);
-      exit(EXIT_FAILURE);
-    }
-}
-
-static struct
-poptOption popt_options[] =
-{
-  { NULL,             '\0', POPT_ARG_CALLBACK, popt_arg_extractor },
-  { "geometry",        'g', POPT_ARG_STRING, NULL, 'g',
-    N_("Geometry string: WxH+X+Y"), N_("GEO") },
-  { "config-file",     'f', POPT_ARG_STRING, NULL, 'f',
-    N_("Configuration file name"), N_("FILE") },
-  { NULL,             '\0', 0, NULL, 0 }
+  { "geometry",        'g', 0, G_OPTION_ARG_STRING, &geometry, "Geometry string: WxH+X+Y", "GEO" },
+  { "config-file",     'f', 0, G_OPTION_ARG_FILENAME, &config_fn, "Configuration file name", "FILE" },
+  { NULL }
 };
 
-int geometry_w = -1, geometry_h = -1;
-int geometry_x = -1, geometry_y = -1;
-  
 int
 main(int argc, char *argv[])
 {
-	// mtrace();
-
+  GnomeProgram *stripchart;
+  GOptionContext *option_context;
   Chart_app *app;
 
   prog_name = argv[0];
   if (strrchr(prog_name, '/'))
     prog_name = strrchr(prog_name, '/') + 1;
 
-  gnome_init_with_popt_table(
-    _("Stripchart"), VERSION, argc, argv, popt_options, 0, NULL);
+  option_context = g_option_context_new (PACKAGE);
+  g_option_context_add_main_entries (option_context, option_entries, NULL);
+  stripchart = gnome_program_init(PACKAGE, VERSION, LIBGNOMEUI_MODULE, argc, argv, 
+		  GNOME_PARAM_GOPTION_CONTEXT, option_context, 
+		  GNOME_PARAM_NONE);
 
   app = chart_app_new();
-  app->frame = gnome_app_new("stripchart", _("Stripchart"));
+  app->frame = gnome_app_new("stripchart", ("Stripchart"));
   gtk_window_set_default_size(GTK_WINDOW(app->frame), 360, 50);
-  //gtk_widget_set_uposition(app->frame, geometry_x, geometry_y);
+  if (geometry)
+	  gtk_window_parse_geometry(GTK_WINDOW(app->frame), geometry);
   gtk_widget_show(app->frame);
-  gtk_signal_connect(GTK_OBJECT(app->frame), "destroy", GTK_SIGNAL_FUNC(quit_event), NULL);
+  g_signal_connect(GTK_OBJECT(app->frame), "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
   gnome_app_set_contents(GNOME_APP(app->frame), app->hbox);
 
-  if (geometry)
-	  gtk_window_parse_geometry(GTK_WINDOW(app->frame), geometry);
-
   gtk_widget_add_events(app->strip, GDK_BUTTON_PRESS_MASK);
-  gtk_signal_connect(GTK_OBJECT(app->frame),
-    "button-press-event", GTK_SIGNAL_FUNC(on_button_press), app);
+  g_signal_connect(GTK_OBJECT(app->frame),
+    "button-press-event", G_CALLBACK(on_button_press), app);
+  g_signal_connect(GTK_OBJECT(app->frame),
+    "popup-menu", G_CALLBACK(on_popup_menu), app);
 
   gtk_main();
   return EXIT_SUCCESS;

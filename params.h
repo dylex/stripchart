@@ -55,7 +55,6 @@ typedef struct
   char *name, *desc, *eqn, *fn, *pattern;
   char *top_min, *top_max, *bot_min, *bot_max;
   char *scale, *plot, *color_names;
-  int colors;
 }
 Param_desc;
 

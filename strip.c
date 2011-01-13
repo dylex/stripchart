@@ -84,9 +84,9 @@ strip_update_by_shifting(Strip *strip)
   gint width = widget->allocation.width;
   gint height = widget->allocation.height;
 
-  gdk_window_copy_area(widget->window,
+  gdk_draw_drawable(widget->window,
     widget->style->fg_gc[GTK_WIDGET_STATE(widget)],
-    0,0,widget->window, 1,0, width-1,height);
+    widget->window, 1,0,0,0, width-1,height);
 
   gdk_draw_rectangle(widget->window,
     widget->style->bg_gc[GTK_WIDGET_STATE(widget)],

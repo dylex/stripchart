@@ -20,17 +20,10 @@
 #include <libxml/parser.h>	/* XML input routines */
 #include <libxml/tree.h>	/* XML output routines */
 #include <gtk/gtk.h>
+#include <gnome.h>
 
 
-static char *whitespace = " \t\r\n";
-
-typedef struct
-{
-  Param_desc *desc;
-  Param_page *page;
-  Chart_app *app;
-}
-Param_name_page;
+static const char *whitespace = " \t\r\n";
 
 static void
 set_entry(GtkWidget *entry, const char *text)
@@ -39,64 +32,59 @@ set_entry(GtkWidget *entry, const char *text)
 }
 
 static void
-set_color(ChartDatum *datum, char *color_name, int cnum)
+set_color(ChartDatum *datum, const GdkColor *color, int cnum)
 {
   Chart *chart = datum->chart;
 
-  gdk_color_parse(color_name, &datum->gdk_color[cnum]);
-  gdk_color_alloc(chart->colormap, &datum->gdk_color[cnum]);
+  datum->gdk_color[cnum] = *color;
+  gdk_colormap_alloc_color(chart->colormap, &datum->gdk_color[cnum], FALSE, TRUE);
   datum->gdk_gc[cnum] = gdk_gc_new(GTK_WIDGET(chart)->window);
   gdk_gc_set_foreground(datum->gdk_gc[cnum], &datum->gdk_color[cnum]);
 }
 
 static void
-on_color_set(GnomeColorPicker *picker,
-  guint red, guint grn, guint blu, guint alpha, Param_page *page)
+on_color_set(GtkColorButton *picker,
+  Param_page *page)
 {
+  GdkColor color;
+  gtk_color_button_get_color(picker, &color);
   int cnum;
-  char color_name[20];
-  sprintf(color_name, "#%04x%04x%04x", red, grn, blu);
 
   for (cnum = 0; cnum <= page->colors; cnum++)
-    if (GNOME_COLOR_PICKER(page->color[cnum]) == picker)
+    if (page->color[cnum] == GTK_WIDGET(picker))
       break;
 
   if (cnum < page->colors && page->strip_data)
-    {
-      set_color(page->strip_data, color_name, cnum);
-    }
+      set_color(page->strip_data, &color, cnum);
 }
 
-static void
+static int
 add_color(Param_page *page)
 {
   if (page->colors <= page->shown)
     {
       page->color = realloc(page->color,
 	(page->colors + 1) * sizeof(*page->color));
-      page->color[page->colors] = gnome_color_picker_new();
+      page->color[page->colors] = gtk_color_button_new();
       gtk_box_pack_start(GTK_BOX(page->color_hbox),
 	page->color[page->colors], FALSE, FALSE, 0);
       g_signal_connect(page->color[page->colors],
-	"color_set", G_CALLBACK(on_color_set), page);
+	"color-set", G_CALLBACK(on_color_set), page);
       page->colors++;
     }
-  gtk_widget_show(page->color[page->shown++]);
+  gtk_widget_show(page->color[page->shown]);
+  return page->shown++;
 }
 
 static void
-param_page_set_from_desc(Param_page *page, Param_desc *desc)
+param_page_set_from_desc(Param_page *page, const Param_desc *desc)
 {
-  int c;
   char *names, *color;
 
   set_entry(page->name, desc? desc->name: NULL);
 
-  gtk_text_set_point(GTK_TEXT(page->desc), 0);
-  gtk_text_forward_delete(GTK_TEXT(page->desc),
-    gtk_text_get_length(GTK_TEXT(page->desc)));
-  gtk_text_insert(GTK_TEXT(page->desc),
-    NULL, NULL, NULL, desc? desc->desc: "", -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(page->desc)),
+		  desc ? desc->desc : "", -1);
 
   set_entry(page->eqn, desc? desc->eqn: NULL);
   set_entry(page->fn, desc? desc->fn: NULL);
@@ -137,18 +125,14 @@ param_page_set_from_desc(Param_page *page, Param_desc *desc)
       break;
     }
 
-  do {
-    add_color(page);
-  } while (desc && page->colors < desc->colors);
-
   names = g_strdup(desc->color_names);
   color = strtok(names, whitespace);
-  for (c = 0; color != NULL; c++)
+  while (color)
     {
       GdkColor rgb;
+      int c = add_color(page);
       if (gdk_color_parse(color, &rgb))
-	gnome_color_picker_set_i16(GNOME_COLOR_PICKER(page->color[c]),
-	  rgb.red, rgb.green, rgb.blue, 0xffff);
+	gtk_color_button_set_color(GTK_COLOR_BUTTON(page->color[c]), &rgb);
       color = strtok(NULL, whitespace);
     }
   g_free(names);
@@ -167,7 +151,7 @@ get_current_page_param(GtkNotebook *notebook)
     return NULL;
 
   page = gtk_notebook_get_nth_page(notebook, pageno);
-  return (Param_page *)gtk_object_get_user_data(GTK_OBJECT(page));
+  return (Param_page *)g_object_get_data(G_OBJECT(page), "page");
 }
 
 /*
@@ -184,75 +168,65 @@ param_desc_ingest(const char *fn)
 
   if (!doc || doc->type != XML_DOCUMENT_NODE
   ||  !xmlDocGetRootElement(doc) || xmlDocGetRootElement(doc)->type != XML_ELEMENT_NODE
-  ||  !streq(xmlDocGetRootElement(doc)->name, "stripchart") )
+  ||  !xmlstreq(xmlDocGetRootElement(doc)->name, "stripchart") )
     {
       static int complaints;
       if (complaints++ == 0)
 	error("Can't parse parameter file \"%s\".\n", fn);
+      xmlFreeDoc(doc);
       return NULL;
     }
 
   for (list = xmlDocGetRootElement(doc)->xmlChildrenNode; list != NULL; list = list->next)
-    if (list->type == XML_ELEMENT_NODE && streq(list->name, "parameter-list"))
+    if (list->type == XML_ELEMENT_NODE && xmlstreq(list->name, "parameter-list"))
       for (param = list->xmlChildrenNode; param; param = param->next)
-	if (param->type == XML_ELEMENT_NODE && streq(param->name, "parameter"))
+	if (param->type == XML_ELEMENT_NODE && xmlstreq(param->name, "parameter"))
 	  {
 	    Param_desc *desc = g_malloc0(sizeof(*desc));
 	    for (elem = param->xmlChildrenNode; elem; elem = elem->next)
 	      if (elem->type == XML_ELEMENT_NODE)
 	      {
-		const char *key = elem->name;
-		const char *val = elem->xmlChildrenNode->content;
+		const xmlChar *key = elem->name;
+		char *val = g_strdup((const char *)elem->xmlChildrenNode->content);
 
-		if (streq(key, "name"))
-		  desc->name = (char *)val;
-		else if (streq(key, "description"))
-		  desc->desc = (char *)val;
-		else if (streq(key, "equation"))
-		  desc->eqn = (char *)val;
-		else if (streq(key, "filename"))
-		  desc->fn = (char *)val;
-		else if (streq(key, "pattern"))
-		  desc->pattern = (char *)val;
-		else if (streq(key, "top-min"))
-		  desc->top_min = (char *)val;
-		else if (streq(key, "top-max"))
-		  desc->top_max = (char *)val;
-		else if (streq(key, "bot-min"))
-		  desc->bot_min = (char *)val;
-		else if (streq(key, "bot-max"))
-		  desc->bot_max = (char *)val;
-		else if (streq(key, "scale"))
-		  desc->scale = (char *)val;
-		else if (streq(key, "plot"))
-		  desc->plot = (char *)val;
-		else if (streq(key, "color"))
-		  {
-		    char *color, *names = g_strdup((char *)val);
-		    desc->color_names = g_strdup((char *)val);
-		    desc->colors = 0;
-		    color = strtok(names, whitespace);
-		    while (color != NULL)
-		      {
-			desc->colors++;
-			color = strtok(NULL, whitespace);
-		      }
-		    g_free(names);
-		  }
+		if (xmlstreq(key, "name"))
+		  desc->name = val;
+		else if (xmlstreq(key, "description"))
+		  desc->desc = val;
+		else if (xmlstreq(key, "equation"))
+		  desc->eqn = val;
+		else if (xmlstreq(key, "filename"))
+		  desc->fn = val;
+		else if (xmlstreq(key, "pattern"))
+		  desc->pattern = val;
+		else if (xmlstreq(key, "top-min"))
+		  desc->top_min = val;
+		else if (xmlstreq(key, "top-max"))
+		  desc->top_max = val;
+		else if (xmlstreq(key, "bot-min"))
+		  desc->bot_min = val;
+		else if (xmlstreq(key, "bot-max"))
+		  desc->bot_max = val;
+		else if (xmlstreq(key, "scale"))
+		  desc->scale = val;
+		else if (xmlstreq(key, "plot"))
+		  desc->plot = val;
+		else if (xmlstreq(key, "color"))
+		  desc->color_names = val;
 		else
+		{
 		  fprintf(stderr,
 		    "%s: file %s: unrecognized tag \"%s\" containing \"%s\"\n",
 		    prog_name, fn, key, val);
+		  g_free(val);
+		}
 	      }
-/*
-  	    if (streq(desc->scale, "log")) desc->s_log = 1;
-  	    if (streq(desc->type, "indicator")) desc->t_led = 1;
-*/
 	    desc_ptr = g_realloc(desc_ptr,
 	      (item_count + 2) * sizeof(*desc_ptr));
 	    desc_ptr[item_count++] = desc;
 	  }
 
+  xmlFreeDoc(doc);
   desc_ptr[item_count] = NULL;
   return desc_ptr;
 }
@@ -260,8 +234,7 @@ param_desc_ingest(const char *fn)
 static char *
 edit_str(GtkWidget *entry)
 {
-  char *s = gtk_editable_get_chars(GTK_EDITABLE(entry), 0, -1);
-  return (s && *s) ? strdup(s) : NULL;
+  return gtk_editable_get_chars(GTK_EDITABLE(entry), 0, -1);
 }
 
 static void
@@ -269,12 +242,11 @@ page_to_desc(Param_page *page, Param_desc *desc)
 {
   int c, len;
 
-  if (!*gtk_editable_get_chars(GTK_EDITABLE(page->eqn), 0, -1)
-    &&  !*gtk_editable_get_chars(GTK_EDITABLE(page->fn), 0, -1))
-    return;
-
   desc->name = edit_str(page->name);
-  desc->desc = edit_str(page->desc);
+  GtkTextBuffer *buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(page->desc));
+  GtkTextIter start, end;
+  gtk_text_buffer_get_bounds(buf, &start, &end);
+  desc->desc = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
   desc->eqn = edit_str(page->eqn);
   desc->fn = edit_str(page->fn);
   desc->pattern = edit_str(page->pattern);
@@ -297,24 +269,40 @@ page_to_desc(Param_page *page, Param_desc *desc)
   else
     desc->plot = strdup("line");
 
-  desc->colors = page->shown;
-  desc->color_names = g_malloc(page->shown * 10);
+  desc->color_names = g_malloc(page->shown * 16);
+  desc->color_names[0] = 0;
   for (c = len = 0; c < page->shown; c++)
     {
-      guint8 r, g, b;
-      gnome_color_picker_get_i8(GNOME_COLOR_PICKER(page->color[c]),
-	&r, &g, &b, NULL);
-      len += sprintf(desc->color_names + len, "#%02x%02x%02x ", r, g, b);
+      GdkColor rgb;
+      gtk_color_button_get_color(GTK_COLOR_BUTTON(page->color[c]), &rgb);
+      len += sprintf(desc->color_names + len, "%s ", gdk_color_to_string(&rgb));
     }
   if (len)
     desc->color_names[len - 1] = '\0';
+}
+
+static void 
+clear_desc(Param_desc *desc)
+{
+	g_free(desc->name);
+	g_free(desc->desc);
+	g_free(desc->eqn);
+	g_free(desc->fn);
+	g_free(desc->pattern);
+	g_free(desc->top_min);
+	g_free(desc->top_max);
+	g_free(desc->bot_min);
+	g_free(desc->bot_max);
+	g_free(desc->scale);
+	g_free(desc->plot);
+	g_free(desc->color_names);
 }
 
 static void
 add_node(xmlNodePtr node, const char *key, const char *val)
 {
   if (val && *val)
-    xmlNewChild(node, NULL, key, val);
+    xmlNewTextChild(node, NULL, BAD_CAST key, BAD_CAST val);
 }
 
 int
@@ -325,35 +313,35 @@ opts_to_file(Chart_app *app, char *fn)
   xmlNodePtr list, node;
   GtkWidget *nb_page;
 
-  doc = xmlNewDoc("1.0");
-  xmlDocSetRootElement(doc, xmlNewDocNode(doc, NULL, "stripchart", NULL));
+  doc = xmlNewDoc(BAD_CAST "1.0");
+  xmlDocSetRootElement(doc, xmlNewDocNode(doc, NULL, BAD_CAST "stripchart", NULL));
 
   prefs_to_doc(app, doc);
 
-  list = xmlNewChild(xmlDocGetRootElement(doc), NULL, "parameter-list", NULL);
+  list = xmlNewChild(xmlDocGetRootElement(doc), NULL, BAD_CAST "parameter-list", NULL);
 
   while ((nb_page = gtk_notebook_get_nth_page(app->notebook, p)) != NULL)
     {
-      Param_page *page = gtk_object_get_user_data(GTK_OBJECT(nb_page));
+      Param_page *page = g_object_get_data(G_OBJECT(nb_page), "page");
       if (page->strip_data->active)
 	{
-	  Param_desc *desc = g_malloc0(sizeof(*desc));
-	  page_to_desc(page, desc);
-	  node = xmlNewChild(list, NULL, "parameter", NULL);
+	  Param_desc desc;
+	  page_to_desc(page, &desc);
+	  node = xmlNewChild(list, NULL, BAD_CAST "parameter", NULL);
 
-	  add_node(node, "name", desc->name);
-	  add_node(node, "description", desc->desc);
-	  add_node(node, "equation", desc->eqn);
-	  add_node(node, "filename", desc->fn);
-	  add_node(node, "pattern", desc->pattern);
-	  add_node(node, "top-min", desc->top_min);
-	  add_node(node, "top-max", desc->top_max);
-	  add_node(node, "bot-min", desc->bot_min);
-	  add_node(node, "bot-max", desc->bot_max);
-	  add_node(node, "scale", desc->scale);
-	  add_node(node, "plot", desc->plot);
-	  add_node(node, "color", desc->color_names);
-	  g_free(desc);
+	  add_node(node, "name", desc.name);
+	  add_node(node, "description", desc.desc);
+	  add_node(node, "equation", desc.eqn);
+	  add_node(node, "filename", desc.fn);
+	  add_node(node, "pattern", desc.pattern);
+	  add_node(node, "top-min", desc.top_min);
+	  add_node(node, "top-max", desc.top_max);
+	  add_node(node, "bot-min", desc.bot_min);
+	  add_node(node, "bot-max", desc.bot_max);
+	  add_node(node, "scale", desc.scale);
+	  add_node(node, "plot", desc.plot);
+	  add_node(node, "color", desc.color_names);
+	  clear_desc(&desc);
 	}
       p++;
     }
@@ -466,6 +454,8 @@ on_altered(GtkWidget *unused, Param_page *page)
 
   scale_style = str_to_scale_style(desc.scale);
   chart_set_scale_style(page->strip_data, scale_style);
+
+  clear_desc(&desc);
 }
 
 static void
@@ -559,7 +549,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   page->table = gtk_table_new(10, 2, FALSE);
   gtk_widget_show(page->table);
 
-  label = gtk_label_new(_("Parameter"));
+  label = gtk_label_new(("Parameter"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 0, 1, 0, 0, 0, 0);
@@ -570,7 +560,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_table_attach(GTK_TABLE(page->table),
     page->name, 1, 2, 0, 1, 0, 0, 0, 0);
 
-  label = gtk_label_new(_("Description"));
+  label = gtk_label_new(("Description"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 1, 2, 0, 0, 0, 0);
@@ -581,13 +571,13 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
     desc_scroller, 1, 2, 1, 2, GTK_FILL, GTK_FILL, 0, 0);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(desc_scroller),
     GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
-  page->desc = gtk_text_new(NULL, NULL);
+  page->desc = gtk_text_view_new();
   gtk_widget_show(page->desc);
-  gtk_text_set_editable(GTK_TEXT(page->desc), TRUE);
-  gtk_text_set_word_wrap(GTK_TEXT(page->desc), TRUE);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(page->desc), TRUE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(page->desc), GTK_WRAP_WORD_CHAR);
   gtk_container_add(GTK_CONTAINER(desc_scroller), page->desc);
 
-  label = gtk_label_new(_("Equation"));
+  label = gtk_label_new(("Equation"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 2, 3, 0, 0, 0, 0);
@@ -598,7 +588,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_table_attach(GTK_TABLE(page->table),
     page->eqn, 1, 2, 2, 3, (GTK_EXPAND | GTK_FILL), 0, 0, 0);
 
-  label = gtk_label_new(_("Filename"));
+  label = gtk_label_new(("Filename"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 3, 4, 0, 0, 0, 0);
@@ -609,7 +599,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_table_attach(GTK_TABLE(page->table),
     page->fn, 1, 2, 3, 4, (GTK_EXPAND | GTK_FILL), 0, 0, 0);
 
-  label = gtk_label_new(_("Pattern"));
+  label = gtk_label_new(("Pattern"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 4, 5, 0, 0, 0, 0);
@@ -620,7 +610,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_table_attach(GTK_TABLE(page->table),
     page->pattern, 1, 2, 4, 5, (GTK_EXPAND | GTK_FILL), 0, 0, 0);
 
-  label = gtk_label_new(_("Top"));
+  label = gtk_label_new(("Top"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 5, 6, 0, 0, 0, 0);
@@ -630,7 +620,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_table_attach(GTK_TABLE(page->table),
     top_hbox, 1, 2, 5, 6, 0, 0, 0, 0);
 
-  label = gtk_label_new(_("Min"));
+  label = gtk_label_new(("Min"));
   gtk_widget_show(label);
   gtk_box_pack_start(GTK_BOX(top_hbox), label, FALSE, FALSE, 0);
 
@@ -639,7 +629,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   g_signal_connect(page->top_min, "changed", G_CALLBACK(on_top_min), page);
   gtk_box_pack_start(GTK_BOX(top_hbox), page->top_min, FALSE, FALSE, 0);
 
-  label = gtk_label_new(_("Max"));
+  label = gtk_label_new(("Max"));
   gtk_widget_show(label);
   gtk_box_pack_start(GTK_BOX(top_hbox), label, FALSE, FALSE, 0);
 
@@ -648,7 +638,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   g_signal_connect(page->top_min, "changed", G_CALLBACK(on_top_max), page);
   gtk_box_pack_start(GTK_BOX(top_hbox), page->top_max, FALSE, FALSE, 0);
 
-  label = gtk_label_new(_("Bottom"));
+  label = gtk_label_new(("Bottom"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 6, 7, 0, 0, 0, 0);
@@ -658,25 +648,25 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
   gtk_table_attach(GTK_TABLE(page->table),
     bot_hbox, 1, 2, 6, 7, 0, 0, 0, 0);
 
-  label = gtk_label_new(_("Min"));
+  label = gtk_label_new(("Min"));
   gtk_widget_show(label);
   gtk_box_pack_start(GTK_BOX(bot_hbox), label, FALSE, FALSE, 0);
 
   page->bot_min = gtk_entry_new();
   gtk_widget_show(page->bot_min);
-  g_signal_connect(GTK_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_min), page);
+  g_signal_connect(G_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_min), page);
   gtk_box_pack_start(GTK_BOX(bot_hbox), page->bot_min, FALSE, FALSE, 0);
 
-  label = gtk_label_new(_("Max"));
+  label = gtk_label_new(("Max"));
   gtk_widget_show(label);
   gtk_box_pack_start(GTK_BOX(bot_hbox), label, FALSE, FALSE, 0);
 
   page->bot_max = gtk_entry_new();
   gtk_widget_show(page->bot_max);
-  g_signal_connect(GTK_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_max), page);
+  g_signal_connect(G_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_max), page);
   gtk_box_pack_start(GTK_BOX(bot_hbox), page->bot_max, FALSE, FALSE, 0);
 
-  label = gtk_label_new(_("Scale"));
+  label = gtk_label_new(("Scale"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 7, 8, 0, 0, 0, 0);
@@ -687,20 +677,20 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
     scale_hbox, 1, 2, 7, 8, GTK_FILL, GTK_FILL, 0, 0);
 
   page->linear =
-    gtk_radio_button_new_with_label(scale_hbox_group, _("Linear"));
+    gtk_radio_button_new_with_label(scale_hbox_group, ("Linear"));
   scale_hbox_group =
-    gtk_radio_button_group(GTK_RADIO_BUTTON(page->linear));
-  g_signal_connect(GTK_OBJECT(page->linear), "toggled", G_CALLBACK(on_altered), page);
+    gtk_radio_button_get_group(GTK_RADIO_BUTTON(page->linear));
+  g_signal_connect(G_OBJECT(page->linear), "toggled", G_CALLBACK(on_altered), page);
   gtk_widget_show(page->linear);
   gtk_box_pack_start(GTK_BOX(scale_hbox), page->linear, FALSE, FALSE, 0);
 
   page->log =
-    gtk_radio_button_new_with_label(scale_hbox_group, _("Logarithmic"));
-  scale_hbox_group = gtk_radio_button_group(GTK_RADIO_BUTTON(page->log));
+    gtk_radio_button_new_with_label(scale_hbox_group, ("Logarithmic"));
+  scale_hbox_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(page->log));
   gtk_widget_show(page->log);
   gtk_box_pack_start(GTK_BOX(scale_hbox), page->log, FALSE, FALSE, 0);
 
-  label = gtk_label_new(_("Type"));
+  label = gtk_label_new(("Type"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 8, 9, 0, 0, 0, 0);
@@ -711,39 +701,39 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
     type_hbox, 1, 2, 8, 9, GTK_FILL, GTK_FILL, 0, 0);
 
   page->indicator =
-    gtk_radio_button_new_with_label(type_hbox_group, _("Indicator"));
+    gtk_radio_button_new_with_label(type_hbox_group, ("Indicator"));
   type_hbox_group =
-    gtk_radio_button_group(GTK_RADIO_BUTTON(page->indicator));
+    gtk_radio_button_get_group(GTK_RADIO_BUTTON(page->indicator));
   gtk_widget_show(page->indicator);
   gtk_box_pack_start(GTK_BOX(type_hbox), page->indicator, FALSE, FALSE, 0);
 
   page->line =
-    gtk_radio_button_new_with_label(type_hbox_group, _("Line"));
+    gtk_radio_button_new_with_label(type_hbox_group, ("Line"));
   type_hbox_group =
-    gtk_radio_button_group(GTK_RADIO_BUTTON(page->line));
+    gtk_radio_button_get_group(GTK_RADIO_BUTTON(page->line));
   gtk_widget_show(page->line);
   gtk_box_pack_start(GTK_BOX(type_hbox), page->line, FALSE, FALSE, 0);
 
   page->point =
-    gtk_radio_button_new_with_label(type_hbox_group, _("Point"));
+    gtk_radio_button_new_with_label(type_hbox_group, ("Point"));
   type_hbox_group =
-    gtk_radio_button_group(GTK_RADIO_BUTTON(page->point));
+    gtk_radio_button_get_group(GTK_RADIO_BUTTON(page->point));
   gtk_widget_show(page->point);
   gtk_box_pack_start(GTK_BOX(type_hbox), page->point, FALSE, FALSE, 0);
 
   page->solid =
-    gtk_radio_button_new_with_label(type_hbox_group, _("Solid"));
+    gtk_radio_button_new_with_label(type_hbox_group, ("Solid"));
   type_hbox_group =
-    gtk_radio_button_group(GTK_RADIO_BUTTON(page->solid));
+    gtk_radio_button_get_group(GTK_RADIO_BUTTON(page->solid));
   gtk_widget_show(page->solid);
   gtk_box_pack_start(GTK_BOX(type_hbox), page->solid, FALSE, FALSE, 0);
 
-  g_signal_connect(GTK_OBJECT(page->indicator), "toggled", G_CALLBACK(on_type_toggle), page);
-  g_signal_connect(GTK_OBJECT(page->line), "toggled", G_CALLBACK(on_type_toggle), page);
-  g_signal_connect(GTK_OBJECT(page->point), "toggled", G_CALLBACK(on_type_toggle), page);
-  g_signal_connect(GTK_OBJECT(page->solid), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(G_OBJECT(page->indicator), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(G_OBJECT(page->line), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(G_OBJECT(page->point), "toggled", G_CALLBACK(on_type_toggle), page);
+  g_signal_connect(G_OBJECT(page->solid), "toggled", G_CALLBACK(on_type_toggle), page);
 
-  label = gtk_label_new(_("Color"));
+  label = gtk_label_new(("Color"));
   gtk_widget_show(label);
   gtk_table_attach(GTK_TABLE(page->table),
     label, 0, 1, 9, 10, 0, 0, 0, 0);
@@ -772,8 +762,8 @@ add_page_before(Chart_app *app, int n, Param_desc *desc)
 
   gtk_notebook_insert_page(app->notebook,
     page->table, gtk_label_new(pno_str), n);
-  gtk_notebook_set_page(app->notebook, n);
-  gtk_object_set_user_data(GTK_OBJECT(page->table), page);
+  gtk_notebook_set_current_page(app->notebook, n);
+  g_object_set_data(G_OBJECT(page->table), "page", page);
 
 #ifdef DEBUG
   printf("add_param: n %d, page %p\n", n, page);
@@ -803,16 +793,16 @@ on_apply(GtkMenuItem *menuitem, Chart_app *app)
 
   while ((nb_page = gtk_notebook_get_nth_page(app->notebook, p)) != NULL)
     {
-      Param_page *page = gtk_object_get_user_data(GTK_OBJECT(nb_page));
+      Param_page *page = g_object_get_data(G_OBJECT(nb_page), "page");
       if (page->changed)
 	{
 	  ChartDatum *strip_datum = NULL;
-	  Param_desc *desc = g_malloc0(sizeof(*desc));
-	  page_to_desc(page, desc);
+	  Param_desc desc;
+	  page_to_desc(page, &desc);
 
 	  strip_datum = chart_equation_add(CHART(app->strip),
-	    app->strip_param_group, desc, NULL, p,
-	    str_to_plot_style(desc->plot) != chart_plot_indicator);
+	    app->strip_param_group, &desc, NULL, p,
+	    str_to_plot_style(desc.plot) != chart_plot_indicator);
 
 	  if (strip_datum)
 	    {
@@ -821,7 +811,7 @@ on_apply(GtkMenuItem *menuitem, Chart_app *app)
 	      page->strip_data = strip_datum;
 	    }
 
-	  g_free(desc);
+	  clear_desc(&desc);
 	}
       p++;
     }
@@ -832,7 +822,7 @@ on_delete_param(GtkMenuItem *menuitem, Chart_app *app)
 {
   int n = gtk_notebook_get_current_page(app->notebook);
   GtkWidget *nb_page = gtk_notebook_get_nth_page(app->notebook, n);
-  Param_page *page = gtk_object_get_user_data(GTK_OBJECT(nb_page));
+  Param_page *page = g_object_get_data(G_OBJECT(nb_page), "page");
 
   chart_parameter_deactivate(CHART(app->strip), page->strip_data);
 
@@ -847,21 +837,21 @@ static GnomeUIInfo file_menu_uiinfo[] =
     GNOME_APP_UI_ITEM, N_("Save"),
     NULL,
     on_save, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_SAVE,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_SAVE,
     0, 0, NULL
   },
   {
     GNOME_APP_UI_ITEM, N_("Save As..."),
     NULL,
     on_save_as, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_SAVE_AS,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_SAVE_AS,
     0, 0, NULL
   },
   {
     GNOME_APP_UI_ITEM, N_("Close"),
     NULL,
     on_close, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_EXIT,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_QUIT,
     0, 0, NULL
   },
   GNOMEUIINFO_END
@@ -873,28 +863,28 @@ static GnomeUIInfo edit_menu_uiinfo[] =
     GNOME_APP_UI_ITEM, N_("Add Parameter Before"),
     NULL,
     on_add_before_param, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_BACK,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_ADD,
     0, 0, NULL
   },
   {
     GNOME_APP_UI_ITEM, N_("Add Parameter After"),
     NULL,
     on_add_after_param, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_FORWARD,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_ADD,
     0, 0, NULL
   },
   {
     GNOME_APP_UI_ITEM, N_("Apply Parameter Changes"),
     NULL,
     on_apply, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_BUTTON_APPLY,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_APPLY,
     0, 0, NULL
   },
   {
     GNOME_APP_UI_ITEM, N_("Delete Parameter"),
     NULL,
     on_delete_param, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_CUT,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_DELETE,
     0, 0, NULL
   },
   GNOMEUIINFO_SEPARATOR,
@@ -902,14 +892,14 @@ static GnomeUIInfo edit_menu_uiinfo[] =
     GNOME_APP_UI_ITEM, N_("Add Color"),
     NULL,
     on_add_color, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_FORWARD,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_ADD,
     0, 0, NULL
   },
   {
     GNOME_APP_UI_ITEM, N_("Delete Color"),
     NULL,
     on_delete_color, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GNOME_STOCK_MENU_CUT,
+    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_DELETE,
     0, 0, NULL
   },
   GNOMEUIINFO_END
@@ -966,23 +956,15 @@ create_editor(Chart_app *app)
 {
   GtkWidget *edit_vbox, *edit_handlebox, *edit_menubar;
 
-#if 1
   app->editor = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(app->editor), _("Parameter Editor"));
+  gtk_window_set_title(GTK_WINDOW(app->editor), ("Parameter Editor"));
   gtk_window_set_position(GTK_WINDOW(app->editor), GTK_WIN_POS_NONE);
-  g_signal_connect(GTK_OBJECT(app->editor),
+  g_signal_connect(G_OBJECT(app->editor),
     "delete-event", G_CALLBACK(on_editor_delete), NULL);
 
   edit_vbox = gtk_vbox_new(FALSE, 0);
   gtk_widget_show(edit_vbox);
   gtk_container_add(GTK_CONTAINER(app->editor), edit_vbox);
-#else
-  app->editor = gnome_dialog_new(_("Parameters"), NULL);
-  gnome_dialog_close_hides(GNOME_DIALOG(app->editor), TRUE);
-  g_signal_connect(GTK_OBJECT(app->editor),
-    "delete-event", G_CALLBACK(on_editor_delete), NULL);
-  edit_vbox = GNOME_DIALOG(app->editor)->vbox;
-#endif
 
   edit_handlebox = gtk_handle_box_new();
   gtk_widget_show(edit_handlebox);
@@ -1000,8 +982,8 @@ create_editor(Chart_app *app)
     GTK_WIDGET(app->notebook), TRUE, TRUE, 0);
   gtk_notebook_set_tab_pos(app->notebook, GTK_POS_BOTTOM);
 
-  g_signal_connect(GTK_OBJECT(app->notebook),
+  g_signal_connect(G_OBJECT(app->notebook),
     "switch_page", G_CALLBACK(on_notebook_switch_page), app);
-  g_signal_connect(GTK_OBJECT(edit_menubar_uiinfo[1].widget),
+  g_signal_connect(G_OBJECT(edit_menubar_uiinfo[1].widget),
     "activate", G_CALLBACK(on_edit_menu), app);
 }

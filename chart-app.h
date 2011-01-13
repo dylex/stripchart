@@ -20,16 +20,14 @@
 
 #include "config.h"
 
-#include <gnome.h>
 #include "chart.h"
 #include "strip.h"
 
 extern char *prog_name;
 extern char *config_fn;
 
-typedef struct
+typedef struct _Chart_app
 {
-  struct _Prefs_edit *prefs;
   struct _Param_group *strip_param_group;
 
   char *config_fn;
@@ -44,9 +42,8 @@ Chart_app;
 #include "eval.h"
 #include "utils.h"
 
-void on_button_press(GtkWidget *win, GdkEvent *event, Chart_app *app);
-void on_show_values(GtkWidget *unused, Chart_app *app);
-void menu_popup(GtkWidget *widget, GdkEvent *event, Chart_app *app);
+gboolean on_button_press(GtkWidget *win, GdkEventButton *event, Chart_app *app);
+gboolean on_popup_menu(GtkWidget *win, Chart_app *app);
 void text_refresh(Chart *chart, Chart_app *app);
 Chart_app *chart_app_new(void);
 

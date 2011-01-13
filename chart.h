@@ -108,7 +108,7 @@ void chart_set_interval(Chart *chart, guint msec);
 
 ChartDatum *chart_parameter_add(Chart *chart,
   gdouble (*func)(), gpointer user_data,
-  gchar *color_name, ChartAdjustment *adj, int pageno,
+  const gchar *color_name, ChartAdjustment *adj, int pageno,
   gdouble bot_min, gdouble bot_max, gdouble top_min, gdouble top_max);
 
 void chart_parameter_deactivate(Chart *chart, ChartDatum *param);

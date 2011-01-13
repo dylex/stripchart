@@ -23,14 +23,15 @@
 #include <libxml/parser.h>	/* XML input routines */
 #include <libxml/tree.h>	/* XML output routines */
 
-struct _Prefs_edit
+typedef struct _Prefs_edit
 {
+  Chart_app *app;
   GtkWidget *dialog, *ticks_button, *pen_button;
   GtkObject *strip_interval, *strip_filter;
   GtkObject *minor_ticks, *major_ticks;
   GtkObject *pen_interval, *pen_filter;
-};
-typedef struct _Prefs_edit Prefs_edit;
+}
+Prefs_edit;
 
 void prefs_to_doc(Chart_app *app, xmlDocPtr doc);
 int prefs_ingest(Chart_app *app, char *fn);

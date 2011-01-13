@@ -18,13 +18,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-int streq(const char *s1, const char *s2);
+gboolean streq(const char *s1, const char *s2);
+gboolean xmlstreq(const xmlChar *s1, const char *s2);
 
-#ifdef __GNUC__
+const char *verror(char *msg, va_list args);
 const char *error(char *msg, ...) __attribute__((format (printf, 1, 2)));
-#else 
-const char *error(char *msg, ...);
-#endif
 
 ChartPlotStyle str_to_plot_style(const char *style_name);
 ChartScaleStyle str_to_scale_style(const char *style_name);

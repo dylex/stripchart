@@ -21,15 +21,15 @@
 static void
 fmt_node(xmlNodePtr node, const char *key, const char *fmt, double val)
 {
-  char buf[100];
-  sprintf(buf, fmt, val);
-  xmlNewChild(node, NULL, key, buf);
+  xmlChar buf[100];
+  xmlStrPrintf(buf, 100, BAD_CAST fmt, val);
+  xmlNewChild(node, NULL, BAD_CAST key, buf);
 }
 
 void
 prefs_to_doc(Chart_app *app, xmlDocPtr doc)
 {
-  xmlNodePtr node = xmlNewChild(xmlDocGetRootElement(doc), NULL, "preferences-list", NULL);
+  xmlNodePtr node = xmlNewChild(xmlDocGetRootElement(doc), NULL, BAD_CAST "preferences-list", NULL);
 
   fmt_node(node, "strip-update", "%.0f", app->strip_param_group->interval);
   fmt_node(node, "strip-smooth", "%.4f", app->strip_param_group->filter);
@@ -47,30 +47,30 @@ prefs_ingest(Chart_app *app, char *fn)
 
   if (!doc || doc->type != XML_DOCUMENT_NODE
   ||  !xmlDocGetRootElement(doc) || xmlDocGetRootElement(doc)->type != XML_ELEMENT_NODE
-  ||  !streq(xmlDocGetRootElement(doc)->name, "stripchart") )
+  ||  !xmlstreq(xmlDocGetRootElement(doc)->name, "stripchart") )
     {
+      xmlFreeDoc(doc);
       error("Can't parse preferences file \"%s\".\n", fn);
       return 1;
     }
 
   for (list = xmlDocGetRootElement(doc)->xmlChildrenNode; list != NULL; list = list->next)
-    if (list->type == XML_ELEMENT_NODE && streq(list->name,"preferences-list"))
+    if (list->type == XML_ELEMENT_NODE && xmlstreq(list->name,"preferences-list"))
       for (node = list->xmlChildrenNode; node; node = node->next)
 	if (node->type == XML_ELEMENT_NODE)
 	{
-	  const char *key = node->name;
-	  const char *val = node->xmlChildrenNode->content;
+	  const xmlChar *key = node->name;
+	  const char *val = (const char *)node->xmlChildrenNode->content;
 
-	  if (streq(key, "strip-update"))
-
+	  if (xmlstreq(key, "strip-update"))
 	    app->strip_param_group->interval = atoi(val);
-	  else if (streq(key, "strip-smooth"))
+	  else if (xmlstreq(key, "strip-smooth"))
 	    app->strip_param_group->filter = atof(val);
-	  else if (streq(key, "ticks-enable"))
+	  else if (xmlstreq(key, "ticks-enable"))
 	    STRIP(app->strip)->show_ticks = atoi(val);
-	  else if (streq(key, "ticks-minor"))
+	  else if (xmlstreq(key, "ticks-minor"))
 	    STRIP(app->strip)->minor_ticks = atoi(val);
-	  else if (streq(key, "ticks-major"))
+	  else if (xmlstreq(key, "ticks-major"))
 	    STRIP(app->strip)->major_ticks = atoi(val);
 	  else
 	    fprintf(stderr,
@@ -78,32 +78,31 @@ prefs_ingest(Chart_app *app, char *fn)
 	      prog_name, key, val);
 	}
 
+  xmlFreeDoc(doc);
   return 0;
 }
 
 static void
-prefs_load(Chart_app *app)
+prefs_load(Prefs_edit *prefs, Chart_app *app)
 {
-  gtk_adjustment_set_value(GTK_ADJUSTMENT(app->prefs->strip_interval), 
+  gtk_adjustment_set_value(GTK_ADJUSTMENT(prefs->strip_interval), 
     app->strip_param_group->interval / 1000.0);
 
-  gtk_adjustment_set_value(GTK_ADJUSTMENT(app->prefs->strip_filter), 
+  gtk_adjustment_set_value(GTK_ADJUSTMENT(prefs->strip_filter), 
     1 - app->strip_param_group->filter);
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->prefs->ticks_button),
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(prefs->ticks_button),
     STRIP(app->strip)->show_ticks);
 
-  gtk_adjustment_set_value(GTK_ADJUSTMENT(app->prefs->minor_ticks),
+  gtk_adjustment_set_value(GTK_ADJUSTMENT(prefs->minor_ticks),
     STRIP(app->strip)->minor_ticks);
-  gtk_adjustment_set_value(GTK_ADJUSTMENT(app->prefs->major_ticks),
+  gtk_adjustment_set_value(GTK_ADJUSTMENT(prefs->major_ticks),
     STRIP(app->strip)->major_ticks);
 }
 
 static void
-prefs_apply(Chart_app *app)
+prefs_apply(Prefs_edit *prefs, Chart_app *app)
 {
-  Prefs_edit *prefs = app->prefs;
-
   double strip_interval = GTK_ADJUSTMENT(prefs->strip_interval)->value;
   double strip_filter = GTK_ADJUSTMENT(prefs->strip_filter)->value;
 
@@ -122,28 +121,26 @@ prefs_apply(Chart_app *app)
 }
 
 static void
-on_prefs_click(GtkWidget *w, int button, Chart_app *app)
+on_prefs_click(GtkDialog *w, gint button, Prefs_edit *prefs)
 {
+  Chart_app *app = prefs->app;
   switch(button)
     {
-    case 0: /* Okay */
-      prefs_apply(app);
-      gnome_dialog_close(GNOME_DIALOG(app->prefs->dialog));
+    case GTK_RESPONSE_OK: /* Okay */
+      prefs_apply(prefs, app);
+      gtk_widget_destroy(prefs->dialog);
+      g_free(prefs);
       break;
-    case 1: /* Apply */
-      prefs_apply(app);
+    case GTK_RESPONSE_APPLY: /* Apply */
+      prefs_apply(prefs, app);
       break;
-    case 2: /* Cancel */
-      gnome_dialog_close(GNOME_DIALOG(app->prefs->dialog));
+    case GTK_RESPONSE_CANCEL: /* Cancel */
+    case GTK_RESPONSE_DELETE_EVENT:
+      gtk_widget_destroy(prefs->dialog);
+      g_free(prefs);
       break;
     }
   gtk_widget_queue_draw(app->strip);
-}
-
-static void
-on_prefs_delete(GtkWidget *win, GdkEvent *event, void *nil)
-{
-  gnome_dialog_close(GNOME_DIALOG(win));
 }
 
 void
@@ -154,28 +151,22 @@ on_prefs_edit(GtkWidget *w, Chart_app *app)
   GtkWidget *chart_frame, *chart_table;
   GtkWidget *major_spin, *minor_spin;
 
-  if (app->prefs)
-    {
-      prefs_load(app);
-      gtk_widget_show(app->prefs->dialog);
-      return;
-    }
-
-  prefs = app->prefs = malloc(sizeof(*prefs));
-  prefs->dialog = gnome_dialog_new(_("Preferences"),
-    GNOME_STOCK_BUTTON_OK, GNOME_STOCK_BUTTON_APPLY,
-    GNOME_STOCK_BUTTON_CANCEL, NULL);
-  gnome_dialog_close_hides(GNOME_DIALOG(prefs->dialog), TRUE);
+  prefs = g_malloc(sizeof(*prefs));
+  prefs->app = app;
+  prefs->dialog = gtk_dialog_new_with_buttons("Preferences",
+		  GTK_WINDOW(app->frame), GTK_DIALOG_DESTROY_WITH_PARENT,
+		  GTK_STOCK_OK, GTK_RESPONSE_OK,
+		  GTK_STOCK_APPLY, GTK_RESPONSE_APPLY,
+		  GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+		  NULL);
 /*
   gtk_window_set_position(GTK_WINDOW(prefs->dialog), GTK_WIN_POS_MOUSE);
 */
-  gtk_signal_connect(GTK_OBJECT(prefs->dialog),
-    "clicked", GTK_SIGNAL_FUNC(on_prefs_click), app);
-  gtk_signal_connect(GTK_OBJECT(prefs->dialog),
-    "delete-event", (GtkSignalFunc)on_prefs_delete, NULL);
-  vbox = GNOME_DIALOG(prefs->dialog)->vbox;
+  g_signal_connect(prefs->dialog, "response", G_CALLBACK(on_prefs_click), prefs);
 
-  chart_frame = gtk_frame_new(_("Chart"));
+  vbox = GTK_DIALOG(prefs->dialog)->vbox;
+
+  chart_frame = gtk_frame_new(("Chart"));
   gtk_box_pack_start(GTK_BOX(vbox), chart_frame, TRUE, TRUE, 0);
 
   chart_table = gtk_table_new(3, 2, FALSE);
@@ -185,44 +176,44 @@ on_prefs_edit(GtkWidget *w, Chart_app *app)
   gtk_table_attach(GTK_TABLE(chart_table),
     tick_box, 1, 2, 2, 3, GTK_EXPAND | GTK_FILL, GTK_FILL, 0, 0);
 
-  prefs->ticks_button = gtk_check_button_new_with_label(_("enabled"));
+  prefs->ticks_button = gtk_check_button_new_with_label(("enabled"));
   gtk_box_pack_start(GTK_BOX(tick_box), prefs->ticks_button, FALSE, FALSE, 0);
 
-  prefs->minor_ticks = gtk_adjustment_new(1, 0, 100, 1, 10, 10);
+  prefs->minor_ticks = gtk_adjustment_new(1, 0, 100, 1, 10, 0);
   minor_spin = gtk_spin_button_new(GTK_ADJUSTMENT(prefs->minor_ticks), 1, 0);
   gtk_box_pack_start(GTK_BOX(tick_box), minor_spin, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(tick_box),
-    gtk_label_new(_("minor")), FALSE, FALSE, 0);
+    gtk_label_new(("minor")), FALSE, FALSE, 0);
 
-  prefs->major_ticks = gtk_adjustment_new(1, 0, 100, 1, 10, 10);
+  prefs->major_ticks = gtk_adjustment_new(1, 0, 100, 1, 10, 0);
   major_spin = gtk_spin_button_new(GTK_ADJUSTMENT(prefs->major_ticks), 1, 0);
   gtk_box_pack_start(GTK_BOX(tick_box), major_spin, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(tick_box),
-    gtk_label_new(_("major")), FALSE, FALSE, 0);
+    gtk_label_new(("major")), FALSE, FALSE, 0);
 
-  prefs->strip_interval = gtk_adjustment_new(5, 1, 60, 1, 0, 0);
+  prefs->strip_interval = gtk_adjustment_new(5, 1, 60, 1, 5, 0);
   gtk_table_attach(GTK_TABLE(chart_table),
     gtk_hscale_new(GTK_ADJUSTMENT(prefs->strip_interval)),
     1, 2, 0, 1, GTK_FILL, GTK_FILL, 0, 0);
 
-  prefs->strip_filter = gtk_adjustment_new(0.5, 0, 1, 0.01, 0, 0);
+  prefs->strip_filter = gtk_adjustment_new(0.5, 0, 1, 0.01, 0.1, 0);
   gtk_table_attach(GTK_TABLE(chart_table),
     gtk_hscale_new(GTK_ADJUSTMENT(prefs->strip_filter)),
     1, 2, 1, 2, GTK_FILL, GTK_FILL, 0, 0);
 
   gtk_table_attach(GTK_TABLE(chart_table),
-    gtk_label_new(_("Update")), 0, 1, 0, 1, 0, 0, 8, 0);
+    gtk_label_new(("Update")), 0, 1, 0, 1, 0, 0, 8, 0);
 
   gtk_table_attach(GTK_TABLE(chart_table),
-    gtk_label_new(_("Smooth")), 0, 1, 1, 2, 0, 0, 8, 0);
+    gtk_label_new(("Smooth")), 0, 1, 1, 2, 0, 0, 8, 0);
 
   gtk_table_attach(GTK_TABLE(chart_table), 
-    gtk_label_new(_("Ticks")), 0, 1, 2, 3, 0, 0, 8, 0);
+    gtk_label_new(("Ticks")), 0, 1, 2, 3, 0, 0, 8, 0);
 
   gtk_box_pack_start(GTK_BOX(vbox),
     gtk_hseparator_new(), TRUE, TRUE, 12);
 
-  prefs_load(app);
-  gtk_widget_show_all(app->prefs->dialog);
+  prefs_load(prefs, app);
+  gtk_widget_show_all(prefs->dialog);
 }
 

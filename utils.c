@@ -22,31 +22,46 @@
 /*
  * streq -- case-blind string comparison returning true on equality.
  */
-int
+gboolean
 streq(const char *s1, const char *s2)
 {
   return s1 && s2 && strcasecmp(s1, s2) == 0;
+}
+
+gboolean
+xmlstreq(const xmlChar *s1, const char *s2)
+{
+  return s1 && s2 && xmlStrcasecmp(s1, BAD_CAST s2) == 0;
 }
 
 /*
  * error -- error handler used primarily by eval.
  */
 const char *
-error(char *msg, ...)
+verror(char *msg, va_list args)
 {
-  int len;
-  va_list args;
   static char err_msg[1000];
+  vsnprintf(err_msg, 1000, msg, args);
 
   fflush(stdout);
+  fprintf(stderr, "%s: %s\n", prog_name, err_msg);
+
+  GtkWidget *dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK, "%s", err_msg);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  return err_msg;
+}
+
+const char *
+error(char *msg, ...)
+{
+  va_list args;
+  const char *err_msg;
+
   va_start(args, msg);
-  len = sprintf(err_msg, "%s: ", prog_name);
-  len += vsprintf(err_msg + len, msg, args);
+  err_msg = verror(msg, args);
   va_end(args);
-
-  fprintf(stderr, "%s\n", err_msg);
-
-  gnome_dialog_run(GNOME_DIALOG(gnome_error_dialog(err_msg)));
 
   return err_msg;
 }
@@ -79,9 +94,12 @@ gdouble
 str_to_gdouble(const char *str, gdouble fallback)
 {
   gdouble value;
+  char *e = NULL;
 
-  if (str && sscanf(str, "%lf", &value) == 1)
-    return value;
-
-  return fallback;
+  if (!str)
+	  return fallback;
+  value = g_ascii_strtod(str, &e);
+  if (e && *e && !isspace(*e))
+	  return fallback;
+  return value;
 }

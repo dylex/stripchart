@@ -95,7 +95,7 @@ text_load_clist(Chart_app *app)
       double top, bot, val;
       char *row_strs[5];
       char val_str[50], top_str[50], bot_str[50];
-      Param_page *page = gtk_object_get_user_data(GTK_OBJECT(nb_page));
+      Param_page *page = g_object_get_data(G_OBJECT(nb_page), "page");
       ChartDatum *datum = page->strip_data;
 
       if (datum && datum->active)
@@ -140,7 +140,7 @@ text_refresh(Chart *chart, Chart_app *app)
  * parameter values in response to a mouse click.  Closes this window
  * if it's already displayed.
  */
-void
+static void
 on_show_values(GtkWidget *unused, Chart_app *app)
 {
   if (app->text_window == NULL)
@@ -175,8 +175,8 @@ on_show_values(GtkWidget *unused, Chart_app *app)
          auto-sizing right. */
       text_load_clist(app);
 
-      gtk_signal_connect(GTK_OBJECT(app->text_window),
-	"delete-event", GTK_SIGNAL_FUNC(gtk_widget_hide), app->text_window);
+      g_signal_connect(G_OBJECT(app->text_window),
+	"delete-event", G_CALLBACK(gtk_widget_hide), app->text_window);
     }
   else if (GTK_WIDGET_VISIBLE(app->text_window))
     gtk_widget_hide(app->text_window);
@@ -184,8 +184,8 @@ on_show_values(GtkWidget *unused, Chart_app *app)
     gtk_widget_show(app->text_window);
 }
 
-void
-menu_popup(GtkWidget *widget, GdkEvent *event, Chart_app *app)
+static void
+menu_popup(GtkWidget *widget, GdkEventButton *event, Chart_app *app)
 {
   static GtkWidget *menu;
 
@@ -195,49 +195,59 @@ menu_popup(GtkWidget *widget, GdkEvent *event, Chart_app *app)
 
       menu = gtk_menu_new();
 
-      menu_item = gtk_menu_item_new_with_label(_("Show values"));
-      gtk_menu_append(GTK_MENU(menu), menu_item);
-      gtk_signal_connect(GTK_OBJECT(menu_item),
-	"activate", GTK_SIGNAL_FUNC(on_show_values), app);
+      menu_item = gtk_menu_item_new_with_label(("Show values"));
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+      g_signal_connect(G_OBJECT(menu_item),
+	"activate", G_CALLBACK(on_show_values), app);
 
-      gtk_menu_append(GTK_MENU(menu), gtk_menu_item_new());
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
-      menu_item = gtk_menu_item_new_with_label(_("Edit Prefs..."));
-      gtk_menu_append(GTK_MENU(menu), menu_item);
-      gtk_signal_connect(GTK_OBJECT(menu_item),
-	"activate", GTK_SIGNAL_FUNC(on_prefs_edit), app);
+      menu_item = gtk_menu_item_new_with_label(("Edit Prefs..."));
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+      g_signal_connect(G_OBJECT(menu_item),
+	"activate", G_CALLBACK(on_prefs_edit), app);
 
-      menu_item = gtk_menu_item_new_with_label(_("Edit Params..."));
-      gtk_menu_append(GTK_MENU(menu), menu_item);
-      gtk_signal_connect(GTK_OBJECT(menu_item),
-	"activate", GTK_SIGNAL_FUNC(on_param_edit), ed);
+      menu_item = gtk_menu_item_new_with_label(("Edit Params..."));
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+      g_signal_connect(G_OBJECT(menu_item),
+	"activate", G_CALLBACK(on_param_edit), ed);
 
-      gtk_menu_append(GTK_MENU(menu), gtk_menu_item_new());
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
-      menu_item = gtk_menu_item_new_with_label(_("Exit"));
-      gtk_menu_append(GTK_MENU(menu), menu_item);
-      gtk_signal_connect_object(GTK_OBJECT(menu_item),
-	"activate", GTK_SIGNAL_FUNC(gtk_main_quit), NULL);
+      menu_item = gtk_menu_item_new_with_label(("Exit"));
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+      g_signal_connect_swapped(G_OBJECT(menu_item),
+	"activate", G_CALLBACK(gtk_main_quit), NULL);
 
       gtk_widget_show_all(menu);
+      gtk_menu_attach_to_widget (GTK_MENU (menu), widget, NULL);
     }
 
   gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, 
-    ((GdkEventButton*)event)->button, ((GdkEventButton*)event)->time);
+    event ? event->button : 0, event ? event->time : 0);
 }
 
-void
-on_button_press(GtkWidget *win, GdkEvent *event, Chart_app *app)
+gboolean
+on_button_press(GtkWidget *win, GdkEventButton *event, Chart_app *app)
 {
-  int button = ((GdkEventButton*)event)->button;
+  int button = event->button;
 #ifdef DEBUG
   printf("on button press: %p, %p, %p\n", win, event, app);
 #endif
+  if (event->type == GDK_BUTTON_PRESS)
   switch (button)
     {
-    case 1: on_show_values(NULL, app); break;
-    case 3: menu_popup(win, event, app); break;
+    case 1: on_show_values(NULL, app); return TRUE;
+    case 3: menu_popup(win, event, app); return TRUE;
     }
+  return FALSE;
+}
+
+gboolean
+on_popup_menu(GtkWidget *win, Chart_app *app)
+{
+	menu_popup(win, NULL, app);
+	return TRUE;
 }
 
 Chart_app *
@@ -250,7 +260,7 @@ chart_app_new(void)
   Chart_app *app = g_malloc(sizeof(*app));
 
   app->strip_param_group = g_malloc0(sizeof(*app->strip_param_group));
-  app->text_window = NULL; app->file_sel = NULL; app->prefs = NULL;
+  app->text_window = NULL; app->file_sel = NULL;
 
   app->hbox = gtk_hbox_new(/*homo*/0, /*pad*/0);
   gtk_widget_show(app->hbox);
@@ -259,11 +269,11 @@ chart_app_new(void)
   gtk_widget_show(app->strip);
   gtk_box_pack_start(GTK_BOX(app->hbox),
     app->strip, /*expand*/1, /*fill*/1, /*pad*/0);
-  gtk_signal_connect(GTK_OBJECT(app->strip),
-    "chart_pre_update", GTK_SIGNAL_FUNC(chart_start), app->strip_param_group);
+  g_signal_connect(G_OBJECT(app->strip),
+    "chart_pre_update", G_CALLBACK(chart_start), app->strip_param_group);
 
-  gtk_signal_connect(GTK_OBJECT(app->strip),
-    "chart_post_update", GTK_SIGNAL_FUNC(text_refresh), app);
+  g_signal_connect(G_OBJECT(app->strip),
+    "chart_post_update", G_CALLBACK(text_refresh), app);
   strip_set_ticks(STRIP(app->strip), 1, 0, 0);
 
   app->strip_param_group->filter = 0.5;
