@@ -63,8 +63,8 @@ val_fmt(double v, char *vs)
   vs[0] = s[0];
   digit_shift(vs+1, s+2, 4, p);
   vs[6] = '\0';
-  if (0 <= t && t <= 5)
-    vs[5] = "\0KMGTP"[t];
+  if (-4 <= t && t <= 5)
+    vs[5] = "pnum\0KMGTP"[t+4];
   else
     sprintf(vs+5, "e%d", 3*t);
 }
@@ -78,51 +78,55 @@ param_type_str(Param_page *page)
   return led ? "*" : (log ? "log" : "-");
 }
 
+enum {
+	TEXT_COLUMN_PARAM,
+	TEXT_COLUMN_CURRENT,
+	TEXT_COLUMN_SCALE,
+	TEXT_COLUMN_BOT,
+	TEXT_COLUMN_TOP,
+	TEXT_COLUMN_COLOR,
+	TEXT_COLUMNS
+};
+
 /*
- * text_load_clist -- fills a clist with chart ident, current, and top values.
+ * text_load_tree -- fills a tree with chart ident, current, and top values.
  */
 static void
-text_load_clist(Chart_app *app)
+text_load_tree(Chart_app *app)
 {
-  int p = 0, row = 0;
+  int p = 0;
   GtkWidget *nb_page;
+  GtkTreeIter iter;
+  char val_str[50], top_str[50], bot_str[50];
 
-  gtk_clist_freeze(GTK_CLIST(app->text_clist));
-  gtk_clist_clear(GTK_CLIST(app->text_clist));
+  g_object_freeze_notify(G_OBJECT(app->text_store));
+  gtk_list_store_clear(app->text_store);
 
-  while ((nb_page = gtk_notebook_get_nth_page(app->notebook, p)) != NULL)
+  for (p = 0; (nb_page = gtk_notebook_get_nth_page(app->notebook, p)) != NULL; p ++)
     {
-      double top, bot, val;
-      char *row_strs[5];
-      char val_str[50], top_str[50], bot_str[50];
       Param_page *page = g_object_get_data(G_OBJECT(nb_page), "page");
       ChartDatum *datum = page->strip_data;
 
       if (datum && datum->active)
 	{
-	  row_strs[0] = gtk_editable_get_chars(GTK_EDITABLE(page->name), 0,-1);
-	  row_strs[1] = val_str;
-	  row_strs[2] = param_type_str(page);
-	  row_strs[3] = bot_str;
-	  row_strs[4] = top_str;
+	  char *name = gtk_editable_get_chars(GTK_EDITABLE(page->name), 0,-1);
+	  val_fmt(datum->history[datum->newest], val_str);
+	  val_fmt(datum->adj->lower, bot_str);
+	  val_fmt(datum->adj->upper, top_str);
+	  gtk_list_store_insert_with_values(app->text_store, &iter, -1,
+			  TEXT_COLUMN_PARAM, name,
+			  TEXT_COLUMN_CURRENT, val_str,
+			  TEXT_COLUMN_SCALE, param_type_str(page),
+			  TEXT_COLUMN_BOT, bot_str,
+			  TEXT_COLUMN_TOP, top_str,
+			  TEXT_COLUMN_COLOR, &page->strip_data->gdk_color[0],
+			  -1);
 
-	  top = datum->adj->upper;
-	  bot = datum->adj->lower;
-	  val = datum->history[datum->newest];
-	  val_fmt(top, top_str);
-	  val_fmt(val, val_str);
-	  val_fmt(bot, bot_str);
-	  gtk_clist_append(GTK_CLIST(app->text_clist), row_strs);
-	  gtk_clist_set_foreground(GTK_CLIST(app->text_clist), row, &page->strip_data->gdk_color[0]);
-	  gtk_clist_set_background(GTK_CLIST(app->text_clist), row, &app->text_window->style->bg[0]);
-	  gtk_clist_set_selectable(GTK_CLIST(app->text_clist), row, FALSE);
-	  row++;
+	  g_free(name);
 	}
-      p++;
     }
-  gtk_clist_columns_autosize(GTK_CLIST(app->text_clist));
-  gtk_container_check_resize(GTK_CONTAINER(app->text_clist));
-  gtk_clist_thaw(GTK_CLIST(app->text_clist));
+
+  g_object_thaw_notify(G_OBJECT(app->text_store));
 }
 
 /*
@@ -132,7 +136,7 @@ void
 text_refresh(Chart *chart, Chart_app *app)
 {
   if (app->text_window && GTK_WIDGET_VISIBLE(app->text_window))
-    text_load_clist(app);
+    text_load_tree(app);
 }
 
 /*
@@ -145,35 +149,53 @@ on_show_values(GtkWidget *unused, Chart_app *app)
 {
   if (app->text_window == NULL)
     {
-      char *titles[] = {
-	      "Param",
-	      "Current",
-	      "Scale",
-	      "Bot",
-	      "Top"
+      const struct {
+	      const char *title;
+	      GType type;
+	      gboolean show;
+      } text_column_info[] = {
+	      { "Param", 	G_TYPE_STRING, TRUE },
+	      { "Current", 	G_TYPE_STRING, TRUE },
+	      { "Scale", 	G_TYPE_STRING, TRUE },
+	      { "Bot",		G_TYPE_STRING, TRUE },
+	      { "Top",		G_TYPE_STRING, TRUE },
+	      { "Color",	GDK_TYPE_COLOR, FALSE }
       };
-      int i;
 
-      app->text_clist = gtk_clist_new_with_titles(sizeof(titles) / sizeof(*titles), titles);
+      int i;
+      GType types[TEXT_COLUMNS];
+
+      for (i = 0; i < TEXT_COLUMNS; i ++)
+	      types[i] = text_column_info[i].type;
+
+      app->text_store = gtk_list_store_newv(TEXT_COLUMNS, types);
+      GtkWidget *text_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(app->text_store));
+      GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+      g_object_set(G_OBJECT(renderer), "background-gdk", &app->frame->style->bg[0], NULL);
       
-      for (i = 0; i < sizeof(titles) / sizeof(*titles); i++)
+      for (i = 0; i < TEXT_COLUMNS; i++)
       {
-	      gtk_clist_set_column_auto_resize(GTK_CLIST(app->text_clist), i, TRUE);
+	      if (!text_column_info[i].show)
+		      continue;
+	      GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(text_column_info[i].title, renderer, 
+			      "text", i,
+			      "foreground-gdk", TEXT_COLUMN_COLOR,
+			      NULL);
+	      gtk_tree_view_column_set_sizing(col, GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+	      gtk_tree_view_append_column(GTK_TREE_VIEW(text_tree), col);
       }
-      gtk_widget_show(app->text_clist);
+      gtk_widget_show(text_tree);
 
       app->text_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
       gtk_widget_set_style(GTK_WIDGET(app->text_window), app->frame->style);
-      gtk_container_add(GTK_CONTAINER(app->text_window), app->text_clist);
-      //gtk_window_set_policy(GTK_WINDOW(app->text_window), /*allow-shrink*/1, /*allow-grow*/1, /*auto-shrink*/1);
-      //gtk_window_set_resizeable(GTK_WINDOW(app->text_window), 1);
+      gtk_container_add(GTK_CONTAINER(app->text_window), text_tree);
       gtk_window_set_transient_for(GTK_WINDOW(app->text_window), GTK_WINDOW(app->frame));
       gtk_widget_show(app->text_window);
 
       /* Load the initial batch of parameter values after showing the
          toplevel window.  This odd sequence is required to get the
          auto-sizing right. */
-      text_load_clist(app);
+      text_load_tree(app);
 
       g_signal_connect(G_OBJECT(app->text_window),
 	"delete-event", G_CALLBACK(gtk_widget_hide), app->text_window);
