@@ -17,7 +17,6 @@
 
 #include "chart-app.h"
 #include <string.h>
-#include <gnome.h>
 
 char *prog_name;
 char *config_fn = NULL;
@@ -34,29 +33,30 @@ GOptionEntry option_entries[] =
 int
 main(int argc, char *argv[])
 {
-  GnomeProgram *stripchart;
-  GOptionContext *option_context;
   Chart_app *app;
+  GError *error = NULL;
 
   prog_name = argv[0];
   if (strrchr(prog_name, '/'))
     prog_name = strrchr(prog_name, '/') + 1;
 
-  option_context = g_option_context_new (PACKAGE);
-  g_option_context_add_main_entries (option_context, option_entries, NULL);
-  stripchart = gnome_program_init(PACKAGE, VERSION, LIBGNOMEUI_MODULE, argc, argv, 
-		  GNOME_PARAM_GOPTION_CONTEXT, option_context, 
-		  GNOME_PARAM_NONE);
+  if (!gtk_init_with_args(&argc, &argv, NULL, option_entries, NULL, &error))
+  {
+	  g_printerr("%s\n", error->message);
+	  g_error_free (error);
+	  return EXIT_FAILURE;
+  }
 
   app = chart_app_new();
-  app->frame = gnome_app_new("stripchart", ("Stripchart"));
+  app->frame = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_title(GTK_WINDOW(app->frame), "Stripchart");
   gtk_window_set_default_size(GTK_WINDOW(app->frame), 360, 50);
   if (geometry)
 	  gtk_window_parse_geometry(GTK_WINDOW(app->frame), geometry);
   gtk_widget_show(app->frame);
   g_signal_connect(GTK_OBJECT(app->frame), "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
-  gnome_app_set_contents(GNOME_APP(app->frame), app->hbox);
+  gtk_container_add(GTK_CONTAINER(app->frame), app->hbox);
 
   gtk_widget_add_events(app->strip, GDK_BUTTON_PRESS_MASK);
   g_signal_connect(GTK_OBJECT(app->frame),

@@ -1,4 +1,4 @@
-PKGS=libgnomeui-2.0 libxml-2.0
+PKGS=libxml-2.0 gtk+-2.0
 CFLAGS = -g -Wall $(shell pkg-config $(PKGS) --cflags) -D_GNU_SOURCE=1
 LDFLAGS=$(shell pkg-config $(PKGS) --libs)
 

@@ -282,7 +282,7 @@ chart_app_new(void)
   Chart_app *app = g_malloc(sizeof(*app));
 
   app->strip_param_group = g_malloc0(sizeof(*app->strip_param_group));
-  app->text_window = NULL; app->file_sel = NULL;
+  app->text_window = NULL;
 
   app->hbox = gtk_hbox_new(/*homo*/0, /*pad*/0);
   gtk_widget_show(app->hbox);

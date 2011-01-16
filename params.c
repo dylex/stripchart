@@ -17,10 +17,10 @@
 
 #include "chart-app.h"
 
+#include <string.h>
 #include <libxml/parser.h>	/* XML input routines */
 #include <libxml/tree.h>	/* XML output routines */
 #include <gtk/gtk.h>
-#include <gnome.h>
 
 
 static const char *whitespace = " \t\r\n";
@@ -354,62 +354,53 @@ opts_to_file(Chart_app *app, char *fn)
 }
 
 static void
-on_save(GtkWidget *w, Chart_app *app)
+on_save(GtkAction *act, Chart_app *app)
 {
   if (opts_to_file(app, app->config_fn) <= 0)
     error("can't save parameters to file \"%s\".", app->config_fn);
-  if (app->file_sel)
-    gtk_widget_hide(app->file_sel);
 }
 
 static void
-on_save_as_cancel(GtkWidget *w, Chart_app *app)
+on_save_as_response(GtkWidget *fs, gint resp, Chart_app *app)
 {
-  gtk_widget_hide(app->file_sel);
+      if (resp == GTK_RESPONSE_ACCEPT)
+      {
+	      g_free(app->config_fn);
+	      app->config_fn = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(fs));
+	      on_save(NULL, app);
+      }
+      gtk_widget_destroy(fs);
 }
 
+
 static void
-on_save_as_okay(GtkWidget *w, Chart_app *app)
+on_save_as(GtkAction *act, Chart_app *app)
 {
-  const gchar *fn;
-
-  free(app->config_fn);
-  fn = gtk_file_selection_get_filename(GTK_FILE_SELECTION(app->file_sel));
-  app->config_fn = strdup(fn);
-
-  on_save(w, app);
+      GtkWidget *fs = gtk_file_chooser_dialog_new("Save As...", GTK_WINDOW(app->editor), 
+		      GTK_FILE_CHOOSER_ACTION_SAVE,
+		      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+		      GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
+		      NULL);
+      gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(fs), app->config_fn);
+      g_signal_connect(fs, "response", G_CALLBACK(on_save_as_response), app);
+      gtk_widget_show(fs);
 }
 
 static void
-on_save_as(GtkMenuItem *menuitem, Chart_app *app)
-{
-  if (app->file_sel == NULL)
-    {
-      GtkWidget *fs = gtk_file_selection_new("Save As...");
-      gtk_file_selection_hide_fileop_buttons(GTK_FILE_SELECTION(fs));
-      gtk_file_selection_set_filename(GTK_FILE_SELECTION(fs), app->config_fn);
-      g_signal_connect(GTK_FILE_SELECTION(fs)->cancel_button, "clicked", G_CALLBACK(on_save_as_cancel), app);
-      g_signal_connect(GTK_FILE_SELECTION(fs)->ok_button, "clicked", G_CALLBACK(on_save_as_okay), app);
-      app->file_sel = fs;
-    }
-  gtk_widget_show(app->file_sel);
-}
-
-static void
-on_close(GtkMenuItem *menuitem, Chart_app *app)
+on_close(GtkAction *act, Chart_app *app)
 {
   gtk_widget_hide(GTK_WIDGET(app->editor));
 }
 
 static void
-on_add_color(GtkMenuItem *menuitem, Chart_app *app)
+on_add_color(GtkAction *act, Chart_app *app)
 {
   Param_page *page = get_current_page_param(app->notebook);
   add_color(page);
 }
 
 static void
-on_delete_color(GtkMenuItem *menuitem, Chart_app *app)
+on_delete_color(GtkAction *act, Chart_app *app)
 {
   Param_page *page = get_current_page_param(app->notebook);
 
@@ -772,21 +763,21 @@ add_page_before(Chart_app *app, int n, Param_desc *desc)
 }
 
 static void
-on_add_before_param(GtkMenuItem *menuitem, Chart_app *app)
+on_add_before_param(GtkAction *act, Chart_app *app)
 {
   int n = gtk_notebook_get_current_page(app->notebook);
   add_page_before(app, n+0, NULL);
 }
 
 static void
-on_add_after_param(GtkMenuItem *menuitem, Chart_app *app)
+on_add_after_param(GtkAction *act, Chart_app *app)
 {
   int n = gtk_notebook_get_current_page(app->notebook);
   add_page_before(app, n+1, NULL);
 }
 
 static void
-on_apply(GtkMenuItem *menuitem, Chart_app *app)
+on_apply(GtkAction *act, Chart_app *app)
 {
   int p = 0;
   GtkWidget *nb_page;
@@ -818,7 +809,7 @@ on_apply(GtkMenuItem *menuitem, Chart_app *app)
 }
 
 static void
-on_delete_param(GtkMenuItem *menuitem, Chart_app *app)
+on_delete_param(GtkAction *act, Chart_app *app)
 {
   int n = gtk_notebook_get_current_page(app->notebook);
   GtkWidget *nb_page = gtk_notebook_get_nth_page(app->notebook, n);
@@ -831,110 +822,49 @@ on_delete_param(GtkMenuItem *menuitem, Chart_app *app)
     add_page_before(app, 0, NULL);
 }
 
-static GnomeUIInfo file_menu_uiinfo[] =
-{
-  {
-    GNOME_APP_UI_ITEM, N_("Save"),
-    NULL,
-    on_save, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_SAVE,
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_ITEM, N_("Save As..."),
-    NULL,
-    on_save_as, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_SAVE_AS,
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_ITEM, N_("Close"),
-    NULL,
-    on_close, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_QUIT,
-    0, 0, NULL
-  },
-  GNOMEUIINFO_END
+static const GtkActionEntry menu_entries[] = {
+	{ "FileMenu", NULL, "_File" },
+	{ "EditMenu", NULL, "_Edit" },
+	{ "Save", GTK_STOCK_SAVE, "_Save", "<control>S", "Save configuration", G_CALLBACK(on_save) },
+	{ "SaveAs", GTK_STOCK_SAVE_AS, "Save _As...", NULL, "Save configuration in a different file", G_CALLBACK(on_save_as) },
+	{ "Close", GTK_STOCK_CLOSE, "_Close", "<control>C", "Close parameter editor", G_CALLBACK(on_close) },
+	{ "AddBefore", GTK_STOCK_ADD, "Add _Before", NULL, "Add a new parameter before the current one", G_CALLBACK(on_add_before_param) },
+	{ "AddAfter", GTK_STOCK_ADD, "Add _After", NULL, "Add a new parameter after the current one", G_CALLBACK(on_add_after_param) },
+	{ "Apply", GTK_STOCK_APPLY, "A_pply", "<control>A", "Apply changes", G_CALLBACK(on_apply) },
+	{ "Delete", GTK_STOCK_DELETE, "_Delete", NULL, "Delete parameter", G_CALLBACK(on_delete_param) },
+	{ "AddColor", GTK_STOCK_COLOR_PICKER, "Add _Color", NULL, "Provide a color for the current parameter", G_CALLBACK(on_add_color) },
+	{ "DeleteColor", GTK_STOCK_REMOVE, "Delete Color", NULL, "Remove color from the current parameter", G_CALLBACK(on_delete_color) },
 };
 
-static GnomeUIInfo edit_menu_uiinfo[] =
-{
-  {
-    GNOME_APP_UI_ITEM, N_("Add Parameter Before"),
-    NULL,
-    on_add_before_param, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_ADD,
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_ITEM, N_("Add Parameter After"),
-    NULL,
-    on_add_after_param, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_ADD,
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_ITEM, N_("Apply Parameter Changes"),
-    NULL,
-    on_apply, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_APPLY,
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_ITEM, N_("Delete Parameter"),
-    NULL,
-    on_delete_param, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_DELETE,
-    0, 0, NULL
-  },
-  GNOMEUIINFO_SEPARATOR,
-  {
-    GNOME_APP_UI_ITEM, N_("Add Color"),
-    NULL,
-    on_add_color, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_ADD,
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_ITEM, N_("Delete Color"),
-    NULL,
-    on_delete_color, NULL, NULL,
-    GNOME_APP_PIXMAP_STOCK, GTK_STOCK_DELETE,
-    0, 0, NULL
-  },
-  GNOMEUIINFO_END
-};
+static const char *menu_desc = 
+	"<ui><menubar name='EditorMenu'>"
+		"<menu action='FileMenu'>"
+			"<menuitem action='Save'/>"
+			"<menuitem action='SaveAs'/>"
+			"<menuitem action='Close'/>"
+		"</menu>"
+		"<menu action='EditMenu'>"
+			"<menuitem action='Apply'/>"
+			"<menuitem action='AddBefore'/>"
+			"<menuitem action='AddAfter'/>"
+			"<menuitem action='Delete'/>"
+			"<separator/>"
+			"<menuitem action='AddColor'/>"
+			"<menuitem action='DeleteColor'/>"
+		"</menu>"
+	"</menubar></ui>";
 
-static GnomeUIInfo edit_menubar_uiinfo[] =
-{
-  {
-    GNOME_APP_UI_SUBTREE, N_("File"),
-    NULL,
-    file_menu_uiinfo, NULL, NULL,
-    GNOME_APP_PIXMAP_NONE, N_("File"),
-    0, 0, NULL
-  },
-  {
-    GNOME_APP_UI_SUBTREE, N_("Edit"),
-    NULL,
-    edit_menu_uiinfo, NULL, NULL,
-    GNOME_APP_PIXMAP_NONE, N_("Edit"),
-    0, 0, NULL
-  },
-  GNOMEUIINFO_END
-};
 
 static void
-on_edit_menu(GtkMenuItem *item, Chart_app *app)
+on_edit_menu(GtkWidget *item, Chart_app *app)
 {
-  GnomeUIInfo *menu = edit_menu_uiinfo;
   Param_page *page = get_current_page_param(app->notebook);
   GtkToggleButton *indy = GTK_TOGGLE_BUTTON(page->indicator);
   int is_indicator = gtk_toggle_button_get_active(indy);
 
-  gtk_widget_set_sensitive(GTK_WIDGET(menu[2].widget), page->changed);
-  gtk_widget_set_sensitive(GTK_WIDGET(menu[5].widget), is_indicator);
-  gtk_widget_set_sensitive(GTK_WIDGET(menu[6].widget),
+  gtk_widget_set_sensitive(app->edit_apply, page->changed);
+  gtk_widget_set_sensitive(app->edit_addcolor, is_indicator);
+  gtk_widget_set_sensitive(app->edit_rmcolor,
     is_indicator && page->shown > 1);
 }
 
@@ -954,7 +884,9 @@ on_param_edit(GtkWidget *unused, GtkWidget *editor)
 void
 create_editor(Chart_app *app)
 {
-  GtkWidget *edit_vbox, *edit_handlebox, *edit_menubar;
+  GtkWidget *edit_vbox, *edit_menubar;
+  GtkActionGroup *action_group;
+  GtkUIManager *ui_manager;
 
   app->editor = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(app->editor), ("Parameter Editor"));
@@ -966,15 +898,18 @@ create_editor(Chart_app *app)
   gtk_widget_show(edit_vbox);
   gtk_container_add(GTK_CONTAINER(app->editor), edit_vbox);
 
-  edit_handlebox = gtk_handle_box_new();
-  gtk_widget_show(edit_handlebox);
-  gtk_box_pack_start(GTK_BOX(edit_vbox), edit_handlebox, TRUE, TRUE, 0);
+  action_group = gtk_action_group_new("MenuActions");
+  gtk_action_group_add_actions(action_group, menu_entries, G_N_ELEMENTS(menu_entries), app);
+  ui_manager = gtk_ui_manager_new();
+  gtk_ui_manager_insert_action_group(ui_manager, action_group, 0);
+  gtk_ui_manager_add_ui_from_string(ui_manager, menu_desc, -1, NULL);
 
-  edit_menubar = gtk_menu_bar_new();
+  edit_menubar = gtk_ui_manager_get_widget(ui_manager, "/EditorMenu");
+  app->edit_apply = gtk_ui_manager_get_widget(ui_manager, "/EditorMenu/EditMenu/Apply");
+  app->edit_addcolor = gtk_ui_manager_get_widget(ui_manager, "/EditorMenu/EditMenu/AddColor");
+  app->edit_rmcolor = gtk_ui_manager_get_widget(ui_manager, "/EditorMenu/EditMenu/DeleteColor");
   gtk_widget_show(edit_menubar);
-  gtk_container_add(GTK_CONTAINER(edit_handlebox), edit_menubar);
-  gnome_app_fill_menu_with_data(GTK_MENU_SHELL(edit_menubar),
-    edit_menubar_uiinfo, NULL, FALSE, 0, app);
+  gtk_box_pack_start(GTK_BOX(edit_vbox), edit_menubar, FALSE, FALSE, 0);
 
   app->notebook = GTK_NOTEBOOK(gtk_notebook_new());
   gtk_widget_show(GTK_WIDGET(app->notebook));
@@ -984,6 +919,6 @@ create_editor(Chart_app *app)
 
   g_signal_connect(G_OBJECT(app->notebook),
     "switch_page", G_CALLBACK(on_notebook_switch_page), app);
-  g_signal_connect(G_OBJECT(edit_menubar_uiinfo[1].widget),
+  g_signal_connect(G_OBJECT(gtk_ui_manager_get_widget(ui_manager, "/EditorMenu/EditMenu")),
     "activate", G_CALLBACK(on_edit_menu), app);
 }

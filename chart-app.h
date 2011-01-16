@@ -32,7 +32,7 @@ typedef struct _Chart_app
 
   char *config_fn;
   GtkWidget *frame, *hbox, *strip;
-  GtkWidget *text_window, *file_sel, *editor;
+  GtkWidget *text_window, *editor, *edit_apply, *edit_addcolor, *edit_rmcolor;
   GtkListStore *text_store;
   GtkNotebook *notebook;
 }

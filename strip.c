@@ -146,13 +146,13 @@ strip_overlay_ticks(Strip *strip)
   gint i, x, yc = height / 2;
 
 #ifdef DRAW_HORIZONTAL_LINE_ON_STRIP
-  gdk_draw_line(widget->window, widget->style->black_gc, 0,yc, width-1,yc);
+  gdk_draw_line(widget->window, widget->style->fg_gc[0], 0,yc, width-1,yc);
 #endif
   for (i = 0, x = width - 1; x >= 0; x--, i++)
     if ((i % strip->minor_ticks) == 0)
       {
 	gint dy = (i % (strip->minor_ticks * strip->major_ticks)) ? 3 : 5;
-	gdk_draw_line(widget->window, widget->style->black_gc,
+	gdk_draw_line(widget->window, widget->style->fg_gc[0],
 	  x,yc+dy, x,yc-dy);
       }
 }
