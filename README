@@ -5,7 +5,8 @@ However, its input mechanism is sufficently general purpose that the
 program is adaptable to a broad range of plotting tasks.
 
 Requirements:
- - libgnomeui-2.0
+ - libxml2
+ - gtk+ 2.16 or so
 
 Instructions:
  - Run make.
