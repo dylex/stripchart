@@ -323,7 +323,7 @@ opts_to_file(Chart_app *app, char *fn)
   while ((nb_page = gtk_notebook_get_nth_page(app->notebook, p)) != NULL)
     {
       Param_page *page = g_object_get_data(G_OBJECT(nb_page), "page");
-      if (page->strip_data->active)
+      if (!page->strip_data || page->strip_data->active)
 	{
 	  Param_desc desc;
 	  page_to_desc(page, &desc);
