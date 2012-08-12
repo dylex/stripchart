@@ -626,7 +626,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->top_max = gtk_entry_new();
   gtk_widget_show(page->top_max);
-  g_signal_connect(page->top_min, "changed", G_CALLBACK(on_top_max), page);
+  g_signal_connect(page->top_max, "changed", G_CALLBACK(on_top_max), page);
   gtk_box_pack_start(GTK_BOX(top_hbox), page->top_max, FALSE, FALSE, 0);
 
   label = gtk_label_new(("Bottom"));
@@ -654,7 +654,7 @@ create_param_page(Chart_app *app, Param_page *page, Param_desc *desc)
 
   page->bot_max = gtk_entry_new();
   gtk_widget_show(page->bot_max);
-  g_signal_connect(G_OBJECT(page->bot_min), "changed", G_CALLBACK(on_bot_max), page);
+  g_signal_connect(G_OBJECT(page->bot_max), "changed", G_CALLBACK(on_bot_max), page);
   gtk_box_pack_start(GTK_BOX(bot_hbox), page->bot_max, FALSE, FALSE, 0);
 
   label = gtk_label_new(("Scale"));

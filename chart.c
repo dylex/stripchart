@@ -95,13 +95,11 @@ chart_get_type(void)
 
 static guint chart_range(gdouble *bound, gdouble val, gdouble min, gdouble max, gboolean side)
 {
-	gdouble in = side ? max : min;
-	gdouble out = side ? min : max;
 	gdouble b;
-	if (side ? val >= in : val <= in)
-		b = in;
-	else if (side ? val <= out : val >= out)
-		b = out;
+	if (side ? val >= max : val <= min)
+		b = side ? max : min;
+	else if (side ? val <= min : val >= max)
+		b = side ? min : max;
 	else if (min < 0 && max > 0)
 		b = val;
 	else if (val == 0)
@@ -110,7 +108,7 @@ static guint chart_range(gdouble *bound, gdouble val, gdouble min, gdouble max, 
 	{
 		gboolean dir = side ^ (val < 0);
 
-		double l = log10(fabs(in)); l -= floor(l);
+		double l = log10(fabs(side ? min : max)); l -= floor(l);
 		if (l == 0 || l == log10(2) || l == log10(5))
 		{
 			l = log10(fabs(val));
@@ -133,8 +131,8 @@ static guint chart_range(gdouble *bound, gdouble val, gdouble min, gdouble max, 
 		}
 
 		b = copysign(b, val);
-		if (side ? b <= out : b >= out)
-			b = out;
+		if (side ? b <= min : b >= max)
+			b = side ? min : max;
 	}
 
 	if (b != *bound)
