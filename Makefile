@@ -1,5 +1,5 @@
 PKGS=libxml-2.0 gtk+-2.0
-CFLAGS = -g -Wall $(shell pkg-config $(PKGS) --cflags) -D_GNU_SOURCE=1
+CFLAGS = -g -Wall $(shell pkg-config $(PKGS) --cflags) -D_GNU_SOURCE=1 -O2
 LDFLAGS=$(shell pkg-config $(PKGS) --libs)
 PREFIX=$(HOME)
 
