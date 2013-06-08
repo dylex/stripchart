@@ -222,9 +222,11 @@ chart_timer(Chart *chart)
 	  while (n-- > 0)
 	    {
 	      gfloat x = datum->history[h];
-	      if (x < datum->min)
+	      if (!isfinite(datum->min))
+		datum->min = datum->max = x;
+	      else if (x < datum->min && isfinite(x))
 		datum->min = x;
-	      else if (datum->max < x)
+	      else if (datum->max < x && isfinite(x))
 		datum->max = x;
 	      if (--h < 0)
 		h = datum->history_size - 1;

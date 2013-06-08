@@ -379,10 +379,10 @@ evaluate_equation(Expr *expr)
       expr->val = 0;
       break;
     case 2:
-      expr->val = expr->val;
       break;
     default:
-      expr->val = last + *expr->filter * (expr->val - last);
+      if (isfinite(last))
+	expr->val = last + *expr->filter * (expr->val - last);
       break;
     }
 
