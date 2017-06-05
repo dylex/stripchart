@@ -184,7 +184,7 @@ param_desc_ingest(const char *fn)
 	  {
 	    Param_desc *desc = g_malloc0(sizeof(*desc));
 	    for (elem = param->xmlChildrenNode; elem; elem = elem->next)
-	      if (elem->type == XML_ELEMENT_NODE)
+	      if (elem->type == XML_ELEMENT_NODE && elem->xmlChildrenNode)
 	      {
 		const xmlChar *key = elem->name;
 		char *val = g_strdup((const char *)elem->xmlChildrenNode->content);
