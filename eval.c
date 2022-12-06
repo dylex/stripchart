@@ -31,7 +31,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/sysctl.h>
+#include <linux/sysctl.h>
 #if HAVE_SYSCTL
 #include <sys/resource.h>
 #endif
